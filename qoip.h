@@ -445,17 +445,6 @@ static void qoip_dec_rgba(qoip_working_t *q) {
 }
 
 /* This function encodes all run1_* ops */
-static int qoip_enc_run1(qoip_working_t *q, u8 opcode) {
-	if (q->run < q->run1_len) {
-		q->out[q->p++] = opcode | (q->run - 1);
-		q->run = 0;
-	}
-	else {
-		q->out[q->p++] = opcode | (q->run1_len - 1);
-		q->run -= q->run1_len;
-	}
-	return 1;
-}
 static void qoip_dec_run1_7(qoip_working_t *q) {
 	q->run = (q->in[q->p++] & 0x7f);
 }
@@ -482,18 +471,6 @@ static void qoip_dec_run1_0(qoip_working_t *q) {
 	q->p++;
 }
 
-static int qoip_enc_run2(qoip_working_t *q, u8 opcode) {
-	q->out[q->p++] = opcode;
-	if (q->run < 256) {
-		q->out[q->p++] = (q->run - 1);
-		q->run = 0;
-	}
-	else {
-		q->out[q->p++] = 255;
-		q->run -= 256;
-	}
-	return 1;
-}
 static void qoip_dec_run2(qoip_working_t *q) {
 	++q->p;
 	q->run = q->in[q->p++];
@@ -507,16 +484,16 @@ static const opdef_t qoip_ops[] = {
 	{OP_RGB,    MASK_8, QOIP_SET_LEN4, "OP_RGB:  4 byte, store RGB  verbatim", qoip_enc_rgb, qoip_dec_rgb, 1},
 	{OP_RGBA,   MASK_8, QOIP_SET_LEN5, "OP_RGBA: 5 byte, store RGBA verbatim", qoip_enc_rgba, qoip_dec_rgba, 1},
 	{OP_A,      MASK_8, QOIP_SET_LEN2, "OP_A:    2 byte, store    A verbatim", qoip_enc_a, qoip_dec_a, 1},
-	{OP_RUN2,   MASK_8, QOIP_SET_RUN2, "OP_RUN2:   2 byte, 256 value RLE", qoip_enc_run2, qoip_dec_run2, 1},
+	{OP_RUN2,   MASK_8, QOIP_SET_RUN2, "OP_RUN2:   2 byte, 256 value RLE", NULL, qoip_dec_run2, 1},
 
-	{OP_RUN1_7, MASK_1, QOIP_SET_RUN1, "OP_RUN1_7: 1 byte, 128 value RLE", qoip_enc_run1, qoip_dec_run1_7, 128},
-	{OP_RUN1_6, MASK_2, QOIP_SET_RUN1, "OP_RUN1_6: 1 byte,  64 value RLE", qoip_enc_run1, qoip_dec_run1_6,  64},
-	{OP_RUN1_5, MASK_3, QOIP_SET_RUN1, "OP_RUN1_5: 1 byte,  32 value RLE", qoip_enc_run1, qoip_dec_run1_5,  32},
-	{OP_RUN1_4, MASK_4, QOIP_SET_RUN1, "OP_RUN1_4: 1 byte,  16 value RLE", qoip_enc_run1, qoip_dec_run1_4,  16},
-	{OP_RUN1_3, MASK_5, QOIP_SET_RUN1, "OP_RUN1_3: 1 byte,   8 value RLE", qoip_enc_run1, qoip_dec_run1_3,   8},
-	{OP_RUN1_2, MASK_6, QOIP_SET_RUN1, "OP_RUN1_2: 1 byte,   4 value RLE", qoip_enc_run1, qoip_dec_run1_2,   4},
-	{OP_RUN1_1, MASK_7, QOIP_SET_RUN1, "OP_RUN1_1: 1 byte,   2 value RLE", qoip_enc_run1, qoip_dec_run1_1,   2},
-	{OP_RUN1_0, MASK_8, QOIP_SET_RUN1, "OP_RUN1_0: 1 byte,   1 value RLE", qoip_enc_run1, qoip_dec_run1_0,   1},
+	{OP_RUN1_7, MASK_1, QOIP_SET_RUN1, "OP_RUN1_7: 1 byte, 128 value RLE", NULL, qoip_dec_run1_7, 128},
+	{OP_RUN1_6, MASK_2, QOIP_SET_RUN1, "OP_RUN1_6: 1 byte,  64 value RLE", NULL, qoip_dec_run1_6,  64},
+	{OP_RUN1_5, MASK_3, QOIP_SET_RUN1, "OP_RUN1_5: 1 byte,  32 value RLE", NULL, qoip_dec_run1_5,  32},
+	{OP_RUN1_4, MASK_4, QOIP_SET_RUN1, "OP_RUN1_4: 1 byte,  16 value RLE", NULL, qoip_dec_run1_4,  16},
+	{OP_RUN1_3, MASK_5, QOIP_SET_RUN1, "OP_RUN1_3: 1 byte,   8 value RLE", NULL, qoip_dec_run1_3,   8},
+	{OP_RUN1_2, MASK_6, QOIP_SET_RUN1, "OP_RUN1_2: 1 byte,   4 value RLE", NULL, qoip_dec_run1_2,   4},
+	{OP_RUN1_1, MASK_7, QOIP_SET_RUN1, "OP_RUN1_1: 1 byte,   2 value RLE", NULL, qoip_dec_run1_1,   2},
+	{OP_RUN1_0, MASK_8, QOIP_SET_RUN1, "OP_RUN1_0: 1 byte,   1 value RLE", NULL, qoip_dec_run1_0,   1},
 
 	{OP_INDEX7, MASK_1, QOIP_SET_INDEX1, "OP_INDEX7: 1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index7, 128},
 	{OP_INDEX6, MASK_2, QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index6,  64},
@@ -804,13 +781,43 @@ static int qoip_expand_opcodes(u8 op_cnt, qoip_opcode_t *ops, int *run1_len, int
 	return 0;
 }
 
+static inline void qoip_encode_run(qoip_working_t *q, u8 run1_opcode, u8 run2_opcode, int run2_exists) {
+	if(q->run) {
+		if(run2_exists) {
+			while(q->run>=256) {
+				q->out[q->p++] = run2_opcode;
+				q->out[q->p++] = 255;
+				q->run -= 256;
+			}
+			if(q->run>q->run1_len) {
+				q->out[q->p++] = run2_opcode;
+				q->out[q->p++] = 255;
+				q->run -= 256;
+			}
+			else if(q->run) {
+				q->out[q->p++] = run1_opcode | (q->run - 1);
+			}
+		}
+		else {
+			while(q->run>q->run1_len) {
+				q->out[q->p++] = run1_opcode | (q->run1_len - 1);
+				q->run -= q->run1_len;
+			}
+			if(q->run) {
+				q->out[q->p++] = run1_opcode | (q->run - 1);
+			}
+		}
+		q->run = 0;
+	}
+}
+
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
 	size_t px_len, px_pos;
-	int channels, i, opstore_cnt, op_cnt, runop_cnt = 0, runop_loc;
+	int channels, i, opstore_cnt, op_cnt, runop_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t opstore[OP_END], *op, *runop;
-	int runop_capacity[4];
+	int runop_capacity[2]={0};
 
 	if (
 		data == NULL || desc == NULL || out == NULL || out_len == NULL ||
@@ -875,17 +882,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 			++q->run;/* Accumulate as much RLE as there is */
 		}
 		else {
-			while(q->run) {/* Generate as many run ops as necessary */
-				for(runop_loc=0; runop_loc < runop_cnt; ++runop_loc) {/* Look for smallest op to fit entire run */
-					if(q->run <= runop_capacity[runop_loc]) {
-						runop[runop_loc].enc(q, runop[runop_loc].opcode);
-						break;
-					}
-				}
-				if(runop_loc == runop_cnt) {/* Use largest runop if run is bigger */
-					runop[runop_loc-1].enc(q, runop[runop_loc-1].opcode);
-				}
-			}
+			qoip_encode_run(q, runop[0].opcode, runop[1].opcode, runop_capacity[1]);
 			/* generate variables that may be needed by ops */
 			q->vr = q->px.rgba.r - q->px_prev.rgba.r;
 			q->vg = q->px.rgba.g - q->px_prev.rgba.g;
@@ -899,21 +896,10 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 					break;
 			}
 		}
-
 		q->px_prev = q->px;
 	}
 	/* Cap off ending run if present*/
-	while(q->run) {/* Generate as many run ops as necessary */
-		for(runop_loc=0; runop_loc < runop_cnt; ++runop_loc) {/* Look for smallest op to fit entire run */
-			if(q->run <= runop_capacity[runop_loc]) {
-				runop[runop_loc].enc(q, runop[runop_loc].opcode);
-				break;
-			}
-		}
-		if(runop_loc == runop_cnt) {/* Use largest runop if run is bigger */
-			runop[runop_loc-1].enc(q, runop[runop_loc-1].opcode);
-		}
-	}
+	qoip_encode_run(q, runop[0].opcode, runop[1].opcode, runop_capacity[1]);
 
 	/* Write bitstream size to file header, a streaming version would skip this step */
 	qoip_write_64(q->out+8, q->p-16);

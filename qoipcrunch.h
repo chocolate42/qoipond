@@ -76,7 +76,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	char currbest_str[256], opstring[256], opstring2[256];
 	int i[5]={0}, set_cnt=5, j, opcnt, opstring_loc, opstring2_loc;
 	size_t currbest_len;
-	u64 cnt = 0;
+	size_t cnt = 0;
 	/* Sets of ops where one op must be chosen from each set
 	OP_END indicates that "no op" is a valid choice from a set
 	These sets are non-overlapping */
