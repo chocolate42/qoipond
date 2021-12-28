@@ -911,9 +911,8 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	qoip_write_64(q->out+8, q->p-16);
 
 	/* Pad footer to 8 byte alignment with minimum 8 bytes of padding */
-	for(;q->p%8;)
+	for(i=0;i<8;++i)
 		q->out[q->p++] = 0;
-	q->out[q->p++] = 0;
 	for(;q->p%8;)
 		q->out[q->p++] = 0;
 
