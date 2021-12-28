@@ -30,7 +30,7 @@ This is simply a flexible QOI-like streaming format, meaning:
 
 - ⚠️ This is not QOI 2.0. Configurable opcodes introduce a good chunk of complexity that probably won't fit a consensus of what a QOI 2.0 should be. However, QOIPond could be used as a tool to test new op combinations that may inform the design of a potential QOI 2.0
 - ⚠️ This is not a complex file format definition. Things like parallel processing, colourspace transformations and traversal order are out of the scope of the bitstream format so are unlikely to be worked on here
-- ⚠️ This format may never be finalised. (Once the format has had time to mature) Some effort will be made to ensure that future decoders can decode old files, and that old decoders recognise when they cannot decode future files, but nothing is guaranteed
+- ⚠️ This format may never be finalised. Once functional, some effort will be made to ensure that future decoders can decode old files and old decoders recognise when they cannot decode future files, but nothing is guaranteed
 
 ## Format
 
@@ -44,7 +44,7 @@ This is primarily a bitstream format, but there is a thin shim of a file format 
 ## Limitations
 
 - A 1 byte RLE op (RUN1, all RUN1_* ops) must exist (this could potentially be relaxed to any RLE encoding)
-- Opcodes cannot have overlapping encodings, except 8-bit-tag 1-byte-encoding ops possibly overlapping with the end of the RUN1 op
+- Opcodes cannot have overlapping encodings, except 8-bit-tag ops possibly overlapping with the end of the RUN1 op
 - Opcodes used in a bitstream are defined in the header and cannot be changed mid-bitstream
 - Multiple 1 byte RUN1 ops cannot be used simultaneously
 - Multiple 1 byte index encodings cannot be used simultaneously
