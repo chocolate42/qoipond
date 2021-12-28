@@ -868,35 +868,57 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 
 	px_len = desc->width * desc->height * desc->channels;
 	channels = desc->channels;
-
-	for (px_pos = 0; px_pos < px_len; px_pos += channels) {
-		if (channels == 4)
+	if(channels==4) {
+		for (px_pos = 0; px_pos < px_len; px_pos += 4) {
 			q->px = *(qoip_rgba_t *)(q->in + px_pos);
-		else {
+
+			if (q->px.v == q->px_prev.v) {
+				++q->run;/* Accumulate as much RLE as there is */
+			}
+			else {
+				qoip_encode_run(q, runop[0].opcode, runop[1].opcode, runop_capacity[1]);
+				/* generate variables that may be needed by ops */
+				q->vr = q->px.rgba.r - q->px_prev.rgba.r;
+				q->vg = q->px.rgba.g - q->px_prev.rgba.g;
+				q->vb = q->px.rgba.b - q->px_prev.rgba.b;
+				q->va = q->px.rgba.a - q->px_prev.rgba.a;
+				q->vg_r = q->vr - q->vg;
+				q->vg_b = q->vb - q->vg;
+				/* Test every op until we find one that handles the pixel */
+				for(i=0;i<op_cnt;++i){
+					if(op[i].enc(q, op[i].opcode))
+						break;
+				}
+			}
+			q->px_prev = q->px;
+		}
+	}
+	else {
+		for (px_pos = 0; px_pos < px_len; px_pos += 3) {
 			q->px.rgba.r = q->in[px_pos + 0];
 			q->px.rgba.g = q->in[px_pos + 1];
 			q->px.rgba.b = q->in[px_pos + 2];
-		}
 
-		if (q->px.v == q->px_prev.v) {
-			++q->run;/* Accumulate as much RLE as there is */
-		}
-		else {
-			qoip_encode_run(q, runop[0].opcode, runop[1].opcode, runop_capacity[1]);
-			/* generate variables that may be needed by ops */
-			q->vr = q->px.rgba.r - q->px_prev.rgba.r;
-			q->vg = q->px.rgba.g - q->px_prev.rgba.g;
-			q->vb = q->px.rgba.b - q->px_prev.rgba.b;
-			q->va = q->px.rgba.a - q->px_prev.rgba.a;
-			q->vg_r = q->vr - q->vg;
-			q->vg_b = q->vb - q->vg;
-			/* Test every op until we find one that handles the pixel */
-			for(i=0;i<op_cnt;++i){
-				if(op[i].enc(q, op[i].opcode))
-					break;
+			if (q->px.v == q->px_prev.v) {
+				++q->run;/* Accumulate as much RLE as there is */
 			}
+			else {
+				qoip_encode_run(q, runop[0].opcode, runop[1].opcode, runop_capacity[1]);
+				/* generate variables that may be needed by ops */
+				q->vr = q->px.rgba.r - q->px_prev.rgba.r;
+				q->vg = q->px.rgba.g - q->px_prev.rgba.g;
+				q->vb = q->px.rgba.b - q->px_prev.rgba.b;
+				q->va = q->px.rgba.a - q->px_prev.rgba.a;
+				q->vg_r = q->vr - q->vg;
+				q->vg_b = q->vb - q->vg;
+				/* Test every op until we find one that handles the pixel */
+				for(i=0;i<op_cnt;++i){
+					if(op[i].enc(q, op[i].opcode))
+						break;
+				}
+			}
+			q->px_prev = q->px;
 		}
-		q->px_prev = q->px;
 	}
 	/* Cap off ending run if present*/
 	qoip_encode_run(q, runop[0].opcode, runop[1].opcode, runop_capacity[1]);
