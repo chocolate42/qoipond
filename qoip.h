@@ -161,6 +161,20 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 with the description from the file header. */
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out);
 
+/* Opcode id enum. Never change order, remove an op, or add a new op anywhere other
+than at the end. Doing this allows for basic backwards compatibility.
+The order of this enum must match the order of qoip_ops[] as these values are an
+index into it. Less kludgey implementation TODO */
+enum{
+	OP_RGB, OP_RGBA, OP_A, OP_RUN2,
+	OP_RUN1_7, OP_RUN1_6, OP_RUN1_5, OP_RUN1_4, OP_RUN1_3, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0,
+	OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
+	OP_DIFF, OP_LUMA2_464, OP_RGB3, OP_LUMA1_232, OP_LUMA3_676, OP_LUMA3_4645,
+	/* new_op id goes here */
+	/* 	OP_INDEXF7, OP_INDEXF6, OP_INDEXF5, OP_INDEXF4, OP_INDEXF3, OP_INDEXF2, // FIFO TODO*/
+	OP_END
+};
+
 #ifdef __cplusplus
 }
 #endif
@@ -177,20 +191,6 @@ enum{QOIP_SET_RUN1, QOIP_SET_RUN2, QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_LEN2
 
 /* Decode masks */
 enum{MASK_1=0x80, MASK_2=0xc0, MASK_3=0xe0, MASK_4=0xf0, MASK_5=0xf8, MASK_6=0xfc, MASK_7=0xfe, MASK_8=0xff};
-
-/* Opcode id enum. Never change order, remove an op, or add a new op anywhere other
-than at the end. Doing this allows for basic backwards compatibility.
-The order of this enum must match the order of qoip_ops[] as these values are an
-index into it. Less kludgey implementation TODO */
-enum{
-	OP_RGB, OP_RGBA, OP_A, OP_RUN2,
-	OP_RUN1_7, OP_RUN1_6, OP_RUN1_5, OP_RUN1_4, OP_RUN1_3, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0,
-	OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
-	OP_DIFF, OP_LUMA2_464, OP_RGB3, OP_LUMA1_232, OP_LUMA3_676, OP_LUMA3_4645,
-	/* new_op id goes here */
-	/* 	OP_INDEXF7, OP_INDEXF6, OP_INDEXF5, OP_INDEXF4, OP_INDEXF3, OP_INDEXF2, // FIFO TODO*/
-	OP_END
-};
 
 typedef union {
 	struct { u8 r, g, b, a; } rgba;
