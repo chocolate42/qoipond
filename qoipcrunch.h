@@ -118,7 +118,6 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	if(level==-1) {
 		if(qoip_encode(data, desc, out, out_len, NULL))
 			return 1;
-		qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, NULL);
 		++cnt;
 		if(count)
 			*count=cnt;
@@ -173,7 +172,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	if(count)
 		*count=cnt;
 
-	qoip_encode(data, desc, out, out_len, currbest_str);
+	if(*out_len!=currbest_len)
+		qoip_encode(data, desc, out, out_len, currbest_str);
 	return 0;
 }
 
