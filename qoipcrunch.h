@@ -51,11 +51,11 @@ typedef struct {
 
 static void qoipcrunch_update_stats(size_t *currbest_len, char *currbest_str, size_t *candidate_len, char *candidate_str) {
 	if(*candidate_len<*currbest_len) {
-		printf("New best length  %8"PRIu64" with opstring %s\n", *candidate_len, candidate_str?candidate_str:"[default]");
+		//printf("New best length  %8"PRIu64" with opstring %s\n", *candidate_len, candidate_str?candidate_str:"[default]");
 		if(candidate_str)
 			strcpy(currbest_str, candidate_str);
 		else
-			currbest_str=NULL;
+			currbest_str="";
 		*currbest_len=*candidate_len;
 	}
 }
@@ -104,10 +104,10 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	int standalone_cnt = 2, standalone_use;
 	u64 standalone_mask;
 	char *common[] = {
-		NULL,/*Whatever the default currently is */
+		"",/*Whatever the default currently is */
 		"000102060e121314", /* PropA + OP_A */
 		"0001050d1213",     /* QOI */
-		"00010203070e151617",    /* delta9h */
+		"00010203070e13151617",    /* delta9h */
 		/* demo28 TODO */
 	};
 	int common_alpha[] = {0, 1, 0, 1};
@@ -120,6 +120,9 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 			return 1;
 		qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, NULL);
 		++cnt;
+		if(count)
+			*count=cnt;
+		return 0;
 	}
 	else if(level==0) {
 		for(j=0;j<common_cnt;++j) {

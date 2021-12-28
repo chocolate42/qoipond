@@ -825,11 +825,11 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	q->out = (unsigned char *) out;
 	q->in = (const unsigned char *)data;
 
-	if (opstring == NULL)
+	if (opstring == NULL || *opstring==0)
 		opstring = "0001060e121314";/* Default, propA */
 
 	if ( parse_opstring(opstring, opstore, &(opstore_cnt)) ) {
-		fprintf(stderr, "qoip_encode: Failed to parse opstring\n");
+		fprintf(stderr, "qoip_encode: Failed to parse opstring '%s'\n", opstring);
 		return 1;
 	}
 	if(qoip_expand_opcodes(opstore_cnt, opstore, &(q->run1_len), &(q->index1_maxval))) {
