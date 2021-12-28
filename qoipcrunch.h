@@ -46,7 +46,7 @@ typedef struct {
 	int level[3];/*The number of ops to test from the set for a given effort level */
 	int ops[8];/* The ops in the set */
 	int codespace[8];/* How many opcodes each op uses */
-	int hasAlpha[8];/* Does the op deal with alpha */
+	int has_alpha[8];/* Does the op deal with alpha */
 } qoip_set_t;
 
 static void qoipcrunch_update_stats(size_t *currbest_len, char *currbest_str, size_t *candidate_len, char *candidate_str) {
@@ -101,7 +101,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	as they are implicit */
 	int standalone[] = {OP_A, OP_RUN2};
 	int standalone_alpha[] = {1, 0};
-	int standalone_cnt = 2, standalone_use;
+	int standalone_cnt = 2, standalone_use, alpha_skip;
 	u64 standalone_mask;
 	char *common[] = {
 		"",/*Whatever the default currently is */
@@ -110,8 +110,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		"00010203070e13151617",    /* delta9h */
 		/* demo28 TODO */
 	};
-	int common_alpha[] = {0, 1, 0, 1};
 	int common_cnt = 4;
+	int no_alpha = desc->channels==3;
 
 	currbest_len = qoip_maxsize(desc);
 
@@ -140,11 +140,19 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 			++cnt;
 		}
 		do {
+			alpha_skip = 0;
 			opcnt=0;
-			for(j=0;j<set_cnt;++j)
+			for(j=0;j<set_cnt;++j) {
 				opcnt+=set[j].codespace[i[j]];
-			if(opcnt>=240 && opcnt<=256 && ((opcnt-254)<set[0].codespace[i[0]])) {
-				opstring_loc=sprintf(opstring, "0001");
+				if(set[j].has_alpha[i[j]]) {
+					alpha_skip=1;
+					break;
+				}
+			}
+			if(alpha_skip)
+				continue;
+			if(opcnt>=240 && opcnt<=256 && ((opcnt-(no_alpha?255:254))<set[0].codespace[i[0]])) {
+				opstring_loc=sprintf(opstring, "00%s", no_alpha?"":"01");
 				for(j=0;j<set_cnt;++j) {
 					if(set[j].ops[i[j]]!=OP_END)
 						opstring_loc+=sprintf(opstring+opstring_loc, "%02x", set[j].ops[i[j]]);
@@ -153,13 +161,20 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 				for(standalone_mask=0; standalone_mask < (1<<standalone_cnt); ++standalone_mask ) {
 					strcpy(opstring2, opstring);
 					opstring2_loc=opstring_loc;
+					alpha_skip=0;
 					for(j=0;j<standalone_cnt;++j) {
 						if(standalone_mask & (1<<j)) {
+							if(no_alpha && standalone_alpha[j]) {
+								alpha_skip=1;
+								break;
+							}
 							opstring2_loc+=sprintf(opstring2+opstring2_loc, "%02x", standalone[j]);
 							++standalone_use;
 						}
 					}
-					if( ((standalone_use + opcnt - 254)<set[0].codespace[i[0]]) ) {
+					if(alpha_skip)
+						continue;
+					if( ((standalone_use + opcnt - (no_alpha?255:254))<set[0].codespace[i[0]]) ) {
 						if(qoip_encode(data, desc, out, out_len, opstring2))
 							return 1;
 						++cnt;
