@@ -814,12 +814,12 @@ static void qoip_finish(qoip_working_t *q) {
 typedef struct {
 	char *opstr;
 	int (*enc)(qoip_working_t*, size_t*);
-	int (*dec)(const void*, size_t, qoip_desc*, int, void*);//TODO
+	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
 int qoip_fastpath_cnt = 1;
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{"00010203060e121314", qoip_encode_default, NULL},/*propA*/
+	{"00010203060e121314", qoip_encode_default, qoip_decode_default},
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
@@ -909,7 +909,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out) {
 	char opstr[513] = {0};
 	int i, op_cnt;
-	size_t chunks_len, px_pos;
+	size_t px_pos;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];
@@ -935,21 +935,20 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 
 	for(i=0;i<op_cnt;++i)
 		sprintf(opstr+(2*i), "%02x", ops[i].id);
-//	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
-//		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
-//			return qoip_fastpath[i].dec(data, data_len, out);
-//	}
+	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
+		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
+			return qoip_fastpath[i].dec(q, data_len);
+	}
 
 	if(qoip_expand_opcodes(op_cnt, ops, &(q->run1_len), &(q->index1_maxval)))
 		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set_desc);
-	chunks_len = data_len;
 	if(q->channels==4) {
 		for (px_pos = 0; px_pos < q->px_len; px_pos += 4) {
 			if (q->run > 0)
 				--q->run;
-			else if (q->p < chunks_len) {
+			else if (q->p < data_len) {
 				for(i=0;i<op_cnt;++i) {
 					if ((q->in[q->p] & ops[i].mask) == ops[i].opcode) {
 						ops[i].dec(q);
@@ -965,7 +964,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		for (px_pos = 0; px_pos < q->px_len; px_pos += 3) {
 			if (q->run > 0)
 				--q->run;
-			else if (q->p < chunks_len) {
+			else if (q->p < data_len) {
 				for(i=0;i<op_cnt;++i) {
 					if ((q->in[q->p] & ops[i].mask) == ops[i].opcode) {
 						ops[i].dec(q);
