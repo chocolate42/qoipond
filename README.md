@@ -2,7 +2,7 @@
 
 MIT licensed library for C/C++
 
-⚠️ This is currently a non-functional WIP, when this warning is removed it should be functional
+⚠️ This should be in a functional state, but it's very much an alpha WIP.
 
 See [QOI](https://github.com/phoboslab/qoi) for the original format
 
@@ -13,8 +13,8 @@ See [QOI](https://github.com/phoboslab/qoi) for the original format
 
 Flexibility like this means:
 - The bitstream can be tailored to the input
-- More pixel formats like higher bit depths could be supported with the same bitstream format (TODO)
-- A potential size-optimising (crunch) program can try many combinations of opcode and pick the set that best represents a given input
+- It can relatively-easily be extended to more pixel formats like higher bit depths (TODO)
+- A size-optimising program (qoipcrunch) can try many combinations of opcode and pick the set that best represents a given input
 - General case performance takes a hit relative to a fixed-opcode format (mostly due to having to use function pointers to swap out opcodes)
 - Fast-path performance optimisations can be implemented for commonly used opcode combinations, allowing them to be just as performant as if used in a fixed-opcode format (TODO)
 
@@ -36,15 +36,39 @@ This is simply a flexible QOI-like streaming format, meaning:
 
 This is primarily a bitstream format, but there is a thin shim of a file format (QOIP) wrapping it. The focus is mostly on the bitstream format, the file format is merely a convenience:
 
-- File header: "QOIP" magic word followed by a few bytes defining the state of the original image (channel count and colourspace at least to match QOI), and an optional filesize as u64le (zeroed if unused)
-- Bitstream header: u32le width, u32le height, u8 version 0x00 in the unlikely event the header format needs to change, u8 opcode_count, u8[] ordered list of opcodes used, padded to 8 byte alignment with zeroes
-- Bitstream, byte aligned
-- Footer, zeroes to pad file to 8 byte alignment, minimum 8 bytes of padding maximum 15
+```
+qoip_file_header {
+	char     magic[4];   // Magic bytes "qoip"
+	uint8_t  channels;   // 3 = RGB, 4 = RGBA
+	uint8_t  colorspace; // 0 = sRGB with linear alpha, 1 = all channels linear
+	uint8_t  padding[2]; // Padded with 0x00 to 8 byte alignment
+	uint64_t size;       // Optional size of the bitstream_header and bitstream combined,
+                       // filled with 0x00 if unused
+}
+
+qoip_bitstream_header {
+	uint32_t width;      // Image width in pixels
+	uint32_t height;     // Image height in pixels
+	uint8_t  version;    // Set to 0x00
+	uint8_t  opcode_cnt; // The number of opcodes used in this combination
+	uint8_t *opcodes;    // The opcodes used in ascending id order
+	uint8_t *padding;    // Padded with 0x00 to 8 byte alignment
+}
+
+qoip_bitstream {
+	uint8_t *stream;     // The raw bitstream using a variable number of bytes.
+}
+
+qoip_footer {
+	uint8_t *padding;    // 8-15 bytes of 0x00 padding to pad to 8 byte alignment
+	                     // with at least 8 bytes of padding guaranteed
+}
+```
 
 ## Limitations
 
 - A 1 byte RLE op (RUN1, all RUN1_* ops) must exist (this could potentially be relaxed to any RLE encoding)
-- Opcodes cannot have overlapping encodings, except 8-bit-tag ops possibly overlapping with the end of the RUN1 op
+- Opcodes cannot have overlapping encodings, except 8-bit-tag ops possibly overlapping with the end of the RUN1 op (which is automatic if the tags have nowhere else to go)
 - Opcodes used in a bitstream are defined in the header and cannot be changed mid-bitstream
 - Multiple 1 byte RUN1 ops cannot be used simultaneously
 - Multiple 1 byte index encodings cannot be used simultaneously
