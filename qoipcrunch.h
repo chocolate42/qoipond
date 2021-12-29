@@ -85,31 +85,32 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	These sets are non-overlapping */
 	qoip_set_t set_generic[] = {
 		{
-			{1,4,8},
+			{1,3,8},
 			{OP_RUN1_4, OP_RUN1_3, OP_RUN1_5, OP_RUN1_6, OP_RUN1_7, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0},
 			{16, 8, 32, 64, 128, 4, 2, 1},
 		},
 		{
-			{3,4,7},
-			{OP_END, OP_INDEX5, OP_INDEX6, OP_INDEX7, OP_INDEX4, OP_INDEX3, OP_INDEX2},
-			{0, 32, 64, 128, 16, 8, 4},
+			{2,4,7},
+			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_INDEX2, OP_END},
+			{32, 64, 16, 128, 8, 4, 0},
 		},
 		{ {2,3,3}, {OP_END, OP_DIFF, OP_LUMA1_232}, {0, 64, 128} },
 		{ {2,2,2}, {OP_END, OP_LUMA2_464}, {0, 64} },
-		{ {2,3,4}, {OP_END, OP_RGB3, OP_LUMA3_676, OP_LUMA3_4645}, {0, 64, 8, 8} },
+		{ {2,2,3}, {OP_END, OP_RGB3, OP_LUMA3_676}, {0, 64, 8} },
+		{ {2,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },
 	};
-	int set_generic_cnt = 5;
+	int set_generic_cnt = 6;
 
 	qoip_set_t set_rgb[] = {
 		{
-			{1,4,8},
+			{1,3,8},
 			{OP_RUN1_4, OP_RUN1_3, OP_RUN1_5, OP_RUN1_6, OP_RUN1_7, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0},
 			{16, 8, 32, 64, 128, 4, 2, 1},
 		},
 		{
-			{3,4,7},
-			{OP_END, OP_INDEX5, OP_INDEX6, OP_INDEX7, OP_INDEX4, OP_INDEX3, OP_INDEX2},
-			{0, 32, 64, 128, 16, 8, 4},
+			{2,4,7},
+			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_INDEX2, OP_END},
+			{32, 64, 16, 128, 8, 4, 0},
 		},
 		{ {2,3,3}, {OP_END, OP_DIFF, OP_LUMA1_232}, {0, 64, 128} },
 		{ {2,2,2}, {OP_END, OP_LUMA2_464}, {0, 64} },
@@ -127,12 +128,11 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	char *common[] = {
 		"",/*Whatever the default currently is */
-		"000102060e121314", /* PropA + OP_A */
 		"0001050d1213",     /* QOI */
 		"00010203070e13151617",    /* delta9h */
 		/* demo28 TODO */
 	};
-	int common_cnt = 4;
+	int common_cnt = 3;
 
 	currbest_len = qoip_maxsize(desc);
 
