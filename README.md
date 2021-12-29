@@ -2,7 +2,7 @@
 
 MIT licensed library for C/C++
 
-⚠️ This should be in a functional state, but it's very much an alpha WIP.
+⚠️ This should be in a functional state, but it's still an alpha WIP.
 
 See [QOI](https://github.com/phoboslab/qoi) for the original format
 
@@ -13,10 +13,11 @@ See [QOI](https://github.com/phoboslab/qoi) for the original format
 
 Flexibility like this means:
 - The bitstream can be tailored to the input
-- It can relatively-easily be extended to more pixel formats like higher bit depths (TODO)
 - A size-optimising program (qoipcrunch) can try many combinations of opcode and pick the set that best represents a given input
+- Caters to different use cases by allowing encode/decode/compression metrics to be balanced by the user
 - General case performance takes a hit relative to a fixed-opcode format (mostly due to having to use function pointers to swap out opcodes)
 - Fast-path performance optimisations can be implemented for commonly used opcode combinations, allowing them to be just as performant as if used in a fixed-opcode format (TODO)
+- The format can be extended to more pixel formats like higher bit depths (TODO)
 
 ## What this is
 
@@ -30,7 +31,7 @@ This is simply a flexible QOI-like streaming format, meaning:
 
 - ⚠️ This is not QOI 2.0. Configurable opcodes introduce a good chunk of complexity that probably won't fit a consensus of what a QOI 2.0 should be. However, QOIPond could be used as a tool to test new op combinations that may inform the design of a potential QOI 2.0
 - ⚠️ This is not a complex file format definition. Things like parallel processing, colourspace transformations and traversal order are out of the scope of the bitstream format so are unlikely to be worked on here
-- ⚠️ This format may never be finalised. Once functional, some effort will be made to ensure that future decoders can decode old files and old decoders recognise when they cannot decode future files, but nothing is guaranteed
+- ⚠️ This format may never be finalised. Once out of alpha some effort will be made to ensure that future decoders can decode old files and old decoders recognise when they cannot decode future files, but nothing is guaranteed
 
 ## Format
 
