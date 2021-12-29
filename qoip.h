@@ -491,18 +491,15 @@ static const opdef_t qoip_ops[] = {
 };
 
 void qoip_print_ops(const opdef_t *ops, FILE *io) {
-	const opdef_t * ptr = ops;
-	while(ptr->id!=OP_END) {
-		fprintf(io, "id=%02x, %s\n", ptr->id, ptr->desc);
-		++ptr;
-	}
+	for(;ops->id!=OP_END;++ops)
+		fprintf(io, "id=%02x, %s\n", ops->id, ops->desc);
 }
 
 void qoip_print_op(const opdef_t *op, FILE *io) {
 	fprintf(io, "id=%02x, %s\n", op->id, op->desc);
 }
 
-/* Sort ops by id for deterministically writing to header */
+/* Order by id for writing to header */
 static int qoip_op_comp_id(const void *a, const void *b) {
 	if( ((qoip_opcode_t *)a)->id == ((qoip_opcode_t *)b)->id )
 		return 0;
@@ -510,7 +507,7 @@ static int qoip_op_comp_id(const void *a, const void *b) {
 		return ( ((qoip_opcode_t *)a)->id < ((qoip_opcode_t *)b)->id ) ? -1: 1;
 }
 
-/* Order by mask size to make opcode generation easier */
+/* Order by mask size for opcode generation */
 static int qoip_op_comp_mask(const void *a, const void *b) {
 	if( ((qoip_opcode_t *)a)->mask == ((qoip_opcode_t *)b)->mask )
 		return 0;
@@ -518,7 +515,7 @@ static int qoip_op_comp_mask(const void *a, const void *b) {
 		return ( ((qoip_opcode_t *)a)->mask < ((qoip_opcode_t *)b)->mask ) ? -1: 1;
 }
 
-/* Order ops should be tested on encode */
+/* Order to be tried on encode */
 static int qoip_op_comp_set(const void *a, const void *b) {
 	if( ((qoip_opcode_t *)a)->set == ((qoip_opcode_t *)b)->set )
 		return 0;
@@ -526,7 +523,7 @@ static int qoip_op_comp_set(const void *a, const void *b) {
 		return ( ((qoip_opcode_t *)a)->set < ((qoip_opcode_t *)b)->set ) ? -1: 1;
 }
 
-/* Order ops should be tested on decode */
+/* Order to be tried on decode */
 static int qoip_op_comp_set_desc(const void *a, const void *b) {
 	return -qoip_op_comp_set(a, b);
 }
@@ -673,7 +670,7 @@ static inline int qoip_valid_char(u8 chr) {
 static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 	int i=0, num, run_present=0, run1_present=0, index1_present=0;
 	*op_cnt = 0;
-	while(opstr[i]) {
+	for(;opstr[i];++i) {
 		if(i==OP_END)
 			return 1;/* More ops defined than exist in the implementation */
 		num = qoip_valid_char(opstr[i]);
@@ -682,13 +679,11 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 		++i;
 		if(qoip_valid_char(opstr[i]) == -1)
 			return 1;/* Second char failed the number test */
-		num *=16;
-		num += qoip_valid_char(opstr[i]);
+		num = (num<<4) | qoip_valid_char(opstr[i]);
 		if(num>=OP_END)
 			return 1;/* An op is defined beyond the largest op in the implementation */
 		ops[*op_cnt].id=num;
 		++*op_cnt;
-		++i;
 	}
 	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	for(i=1;i<*op_cnt;++i) {
@@ -752,28 +747,22 @@ static int qoip_expand_opcodes(u8 op_cnt, qoip_opcode_t *ops, int *run1_len, int
 static inline void qoip_encode_run(qoip_working_t *q) {
 	if(q->run) {
 		if(q->run2_opcode) {
-			while(q->run>=256) {
+			for(; q->run>=256; q->run-=256) {
 				q->out[q->p++] = q->run2_opcode;
 				q->out[q->p++] = 255;
-				q->run -= 256;
 			}
 			if(q->run>q->run1_len) {
 				q->out[q->p++] = q->run2_opcode;
-				q->out[q->p++] = 255;
-				q->run -= 256;
+				q->out[q->p++] = q->run - 1;
 			}
-			else if(q->run) {
+			else if(q->run)
 				q->out[q->p++] = q->run1_opcode | (q->run - 1);
-			}
 		}
 		else {
-			while(q->run>q->run1_len) {
+			for(; q->run>q->run1_len; q->run-=q->run1_len)
 				q->out[q->p++] = q->run1_opcode | (q->run1_len - 1);
-				q->run -= q->run1_len;
-			}
-			if(q->run) {
+			if(q->run)
 				q->out[q->p++] = q->run1_opcode | (q->run - 1);
-			}
 		}
 		q->run = 0;
 	}
@@ -781,9 +770,8 @@ static inline void qoip_encode_run(qoip_working_t *q) {
 
 static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int op_cnt) {
 	int i;
-	if (q->px.v == q->px_prev.v) {
+	if (q->px.v == q->px_prev.v)
 		++q->run;/* Accumulate as much RLE as there is */
-	}
 	else {
 		qoip_encode_run(q);
 		/* generate variables that may be needed by ops */
@@ -802,6 +790,11 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 	q->px_prev = q->px;
 }
 
+static int qoip_ret(int ret, FILE *io, char *s) {
+	fprintf(io, "%s\n", s);
+	return ret;
+}
+
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
 	size_t px_len, px_pos;
 	int channels, i, opstore_cnt, op_cnt = 0;
@@ -814,10 +807,8 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		desc->width == 0 || desc->height == 0 ||
 		desc->channels < 3 || desc->channels > 4 ||
 		desc->colorspace > 1
-	) {
-		fprintf(stderr, "qoip_encode: Bad arguments\n");
-		return 1;
-	}
+	)
+		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 
 	q->out = (unsigned char *) out;
 	q->in = (const unsigned char *)data;
@@ -825,14 +816,10 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	if (opstring == NULL || *opstring==0)
 		opstring = "0001060e121314";/* Default, propA */
 
-	if ( parse_opstring(opstring, opstore, &(opstore_cnt)) ) {
-		fprintf(stderr, "qoip_encode: Failed to parse opstring '%s'\n", opstring);
-		return 1;
-	}
-	if(qoip_expand_opcodes(opstore_cnt, opstore, &(q->run1_len), &(q->index1_maxval))) {
-		fprintf(stderr, "qoip_encode: Failed to expand opstring %s\n", opstring);
-		return 1;
-	}
+	if ( parse_opstring(opstring, opstore, &(opstore_cnt)) )
+		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
+	if(qoip_expand_opcodes(opstore_cnt, opstore, &(q->run1_len), &(q->index1_maxval)))
+		return qoip_ret(1, stderr, "qoip_encode: Failed to expand opstring");
 	qoip_write_file_header(q->out, &(q->p), desc);
 	qoip_write_bitstream_header(q->out, &q->p, desc, opstore, opstore_cnt);
 
@@ -871,8 +858,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 			qoip_encode_inner(q, op, op_cnt);
 		}
 	}
-	/* Cap off ending run if present*/
-	qoip_encode_run(q);
+	qoip_encode_run(q);/* Cap off ending run if present*/
 
 	/* Write bitstream size to file header, a streaming version would skip this step */
 	qoip_write_64(q->out+8, q->p-16);
@@ -897,34 +883,23 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 
 	q->in = (const unsigned char *)data;
 	q->out = (unsigned char *)out;
+	channels = channels==0 ? desc->channels : channels;
 
 	if (
 		data == NULL || desc == NULL ||
-		(channels != 0 && channels != 3 && channels != 4) ||
+		(channels != 3 && channels != 4) ||
 		data_len < QOIP_FILE_HEADER_SIZE
-	) {
-		fprintf(stderr, "qoip_decode: Bad arguments\n");
-		return 1;
-	}
+	)
+		return qoip_ret(1, stderr, "qoip_decode: Bad arguments");
 
-	if (channels == 0)
-		channels = desc->channels;
-
-	if(qoip_read_file_header(q->in, &(q->p), desc)) {
-		fprintf(stderr, "qoip_decode: Failed to read file header\n");
-		return 1;
-	}
-	if(qoip_read_bitstream_header(q->in, &(q->p), desc, ops, &op_cnt)) {
-		fprintf(stderr, "qoip_decode: Failed to read bitstream header\n");
-		return 1;
-	}
-	if(qoip_expand_opcodes(op_cnt, ops, &(q->run1_len), &(q->index1_maxval))) {
-		fprintf(stderr, "qoip_decode: Failed to expand opstring\n");
-		return 1;
-	}
+	if(qoip_read_file_header(q->in, &(q->p), desc))
+		return qoip_ret(1, stderr, "qoip_decode: Failed to read file header");
+	if(qoip_read_bitstream_header(q->in, &(q->p), desc, ops, &op_cnt))
+		return qoip_ret(1, stderr, "qoip_decode: Failed to read bitstream header");
+	if(qoip_expand_opcodes(op_cnt, ops, &(q->run1_len), &(q->index1_maxval)))
+		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 
 	px_len = desc->width * desc->height * channels;
-
 	q->px.v = 0;
 	q->px.rgba.a = 255;
 
