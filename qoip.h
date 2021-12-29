@@ -3,7 +3,6 @@
 Incompatible adaptation of QOI format - https://phoboslab.org
 
 -- LICENSE: The MIT License(MIT)
-
 Copyright(c) 2021 Dominic Szablewski (original QOI format)
 Copyright(c) 2021 Matthew Ling (adaptations for QOIP format)
 
@@ -23,7 +22,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-= Usage =
+-- USAGE:
 Define `QOIP_C` in *one* C file to create the implementation.
 
 #define QOIP_C
@@ -40,40 +39,8 @@ This library provides the following functions
 	qoip_decode takes the number of channels to output (3 or 4), regardless of the
 	number of channels the file contains.
 
-= Format =
-
-A QOIP file has a 16 byte file header, followed by a variable-length bitstream
-header, followed by a variable number of data chunks encoded in the bitstream.
-The bitstream header contains everything required to correctly decode the
-bitstream, the file header is a simple wrapper to store data about the original
-image, and the combined bitstream+bitstream_header size.
-
-qoip_file_header {
-	char     magic[4];   // Magic bytes "qoip"
-	uint8_t  channels;   // 3 = RGB, 4 = RGBA
-	uint8_t  colorspace; // 0 = sRGB with linear alpha, 1 = all channels linear
-	uint8_t  padding[2]; // Padded with 0x00 to 8 byte alignment
-	uint64_t size;       // Optional size of the bitstream_header and bitstream combined,
-                       // filled with 0x00 if unused
-}
-
-qoip_bitstream_header {
-	uint32_t width;      // Image width in pixels
-	uint32_t height;     // Image height in pixels
-	uint8_t  version;    // Set to 0x00
-	uint8_t  opcode_cnt; // The number of opcodes used in this combination
-	uint8_t *opcodes;    // The opcodes used in ascending id order
-	uint8_t *padding;    // Padded with 0x00 to 8 byte alignment
-}
-
-qoip_bitstream {
-	uint8_t *stream;     // The raw bitstream using a variable number of bytes.
-}
-
-qoip_footer {
-	uint8_t *padding;    // 8-15 bytes of 0x00 padding to pad to 8 byte alignment
-	                     // with at least 8 bytes of padding guaranteed
-}
+-- FORMAT:
+See README.md for layout.
 
 The decoder and encoder start with {r: 0, g: 0, b: 0, a: 255} as the previous
 pixel value. Pixels are encoded in one of the used opcodes
