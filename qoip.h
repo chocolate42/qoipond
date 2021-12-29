@@ -166,8 +166,8 @@ typedef union {
 
 /* All working variables needed by a single encode/decode run */
 typedef struct {
-	size_t p;
-	int run, run1_len, index1_maxval;
+	size_t p, px_len;
+	int channels, run, run1_len, index1_maxval;
 	unsigned char *out;
 	const unsigned char *in;
 	qoip_rgba_t index[128], px, px_prev;
@@ -412,7 +412,6 @@ static void qoip_dec_rgba(qoip_working_t *q) {
 	q->px.rgba.a = q->in[q->p++];
 }
 
-/* This function encodes all run1_* ops */
 static void qoip_dec_run1_7(qoip_working_t *q) {
 	q->run = (q->in[q->p++] & 0x7f);
 }
@@ -726,9 +725,8 @@ static int qoip_expand_opcodes(u8 op_cnt, qoip_opcode_t *ops, int *run1_len, int
 			overlap_loc = op - 1;
 			run1 = ops[i].opcnt;
 		}
-		else if(index1_maxval && ops[i].set==QOIP_SET_INDEX1) {
+		else if(index1_maxval && ops[i].set==QOIP_SET_INDEX1)
 			*index1_maxval = ops[i].opcnt - 1;
-		}
 	}
 	for(;i<op_cnt;++i) {/* overlapping */
 		if(ops[i].mask != 0xff)
@@ -795,12 +793,44 @@ static int qoip_ret(int ret, FILE *io, char *s) {
 	return ret;
 }
 
+int qoip_opstring_comp_id(const void *a, const void *b) {
+	return memcmp(a, b, 2);
+}
+
+static void qoip_finish(qoip_working_t *q) {
+	/* Write bitstream size to file header, a streaming version would skip this step */
+	qoip_write_64(q->out+8, q->p-16);
+
+	/* Pad footer to 8 byte alignment with minimum 8 bytes of padding */
+	for(;q->p%8;)
+		q->out[q->p++] = 0;
+	q->out[q->p++] = 0;
+	for(;q->p%8;)
+		q->out[q->p++] = 0;
+}
+
+/* fastpath definitions */
+#include "qoip-fast.c"
+typedef struct {
+	char *opstr;
+	int (*enc)(qoip_working_t*, size_t*);
+	int (*dec)(const void*, size_t, qoip_desc*, int, void*);//TODO
+} qoip_fastpath_t;
+
+int qoip_fastpath_cnt = 1;
+static const qoip_fastpath_t qoip_fastpath[] = {
+	{"00010203060e121314", qoip_encode_default, NULL},/*propA*/
+};
+
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
-	size_t px_len, px_pos;
-	int channels, i, opstore_cnt, op_cnt = 0;
+	char opstr[513];
+	size_t px_pos, opstr_len;
+	int i, opstore_cnt, op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t opstore[OP_END], *op = NULL;
+	q->out = (unsigned char *) out;
+	q->in = (const unsigned char *)data;
 
 	if (
 		data == NULL || desc == NULL || out == NULL || out_len == NULL ||
@@ -810,18 +840,33 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	)
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 
-	q->out = (unsigned char *) out;
-	q->in = (const unsigned char *)data;
-
-	if (opstring == NULL || *opstring==0)
-		opstring = "0001060e121314";/* Default, propA */
-
-	if ( parse_opstring(opstring, opstore, &(opstore_cnt)) )
+	if(opstring == NULL || *opstring==0)
+		opstring = "00010203060e121314";/* Default, propA */
+	if((opstr_len=strlen(opstring))%2)
+		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
+	if(opstr_len>512)
+		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, too big");
+	strcpy(opstr, opstring);
+	for(i=0;i<opstr_len;++i)/*lowercase*/
+		opstr[i] += (opstr[i]>64 && opstr[i]<71) ? 32 : 0;
+	qsort(opstr, opstr_len/2, 2, qoip_opstring_comp_id);
+	if(parse_opstring(opstr, opstore, &opstore_cnt))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
 	if(qoip_expand_opcodes(opstore_cnt, opstore, &(q->run1_len), &(q->index1_maxval)))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to expand opstring");
 	qoip_write_file_header(q->out, &(q->p), desc);
 	qoip_write_bitstream_header(q->out, &q->p, desc, opstore, opstore_cnt);
+
+	q->px_prev.v = 0;
+	q->px_prev.rgba.a = 255;
+	q->px = q->px_prev;
+	q->px_len = desc->width * desc->height * desc->channels;
+	q->channels = desc->channels;
+
+	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
+		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].enc)
+			return qoip_fastpath[i].enc(q, out_len);
+	}
 
 	/* Sort ops into order they should be tested on encode */
 	qsort(opstore, opstore_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set);
@@ -838,20 +883,14 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		}
 	}
 
-	q->px_prev.v = 0;
-	q->px_prev.rgba.a = 255;
-	q->px = q->px_prev;
-
-	px_len = desc->width * desc->height * desc->channels;
-	channels = desc->channels;
-	if(channels==4) {
-		for (px_pos = 0; px_pos < px_len; px_pos += 4) {
+	if(q->channels==4) {
+		for (px_pos = 0; px_pos < q->px_len; px_pos += 4) {
 			q->px = *(qoip_rgba_t *)(q->in + px_pos);
 			qoip_encode_inner(q, op, op_cnt);
 		}
 	}
 	else {
-		for (px_pos = 0; px_pos < px_len; px_pos += 3) {
+		for (px_pos = 0; px_pos < q->px_len; px_pos += 3) {
 			q->px.rgba.r = q->in[px_pos + 0];
 			q->px.rgba.g = q->in[px_pos + 1];
 			q->px.rgba.b = q->in[px_pos + 2];
@@ -860,14 +899,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	}
 	qoip_encode_run(q);/* Cap off ending run if present*/
 
-	/* Write bitstream size to file header, a streaming version would skip this step */
-	qoip_write_64(q->out+8, q->p-16);
-
-	/* Pad footer to 8 byte alignment with minimum 8 bytes of padding */
-	for(i=0;i<8;++i)
-		q->out[q->p++] = 0;
-	for(;q->p%8;)
-		q->out[q->p++] = 0;
+	qoip_finish(q);
 
 	*out_len = q->p;
 
@@ -875,19 +907,20 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 }
 
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out) {
+	char opstr[513] = {0};
 	int i, op_cnt;
-	size_t chunks_len, px_len, px_pos;
+	size_t chunks_len, px_pos;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
-	qoip_opcode_t ops[OP_END] = {0};
+	qoip_opcode_t ops[OP_END];
 
 	q->in = (const unsigned char *)data;
 	q->out = (unsigned char *)out;
-	channels = channels==0 ? desc->channels : channels;
+	q->channels = channels==0 ? desc->channels : channels;
 
 	if (
 		data == NULL || desc == NULL ||
-		(channels != 3 && channels != 4) ||
+		(q->channels != 3 && q->channels != 4) ||
 		data_len < QOIP_FILE_HEADER_SIZE
 	)
 		return qoip_ret(1, stderr, "qoip_decode: Bad arguments");
@@ -896,17 +929,24 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		return qoip_ret(1, stderr, "qoip_decode: Failed to read file header");
 	if(qoip_read_bitstream_header(q->in, &(q->p), desc, ops, &op_cnt))
 		return qoip_ret(1, stderr, "qoip_decode: Failed to read bitstream header");
-	if(qoip_expand_opcodes(op_cnt, ops, &(q->run1_len), &(q->index1_maxval)))
-		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
-
-	px_len = desc->width * desc->height * channels;
+	q->px_len = desc->width * desc->height * q->channels;
 	q->px.v = 0;
 	q->px.rgba.a = 255;
 
+	for(i=0;i<op_cnt;++i)
+		sprintf(opstr+(2*i), "%02x", ops[i].id);
+//	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
+//		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
+//			return qoip_fastpath[i].dec(data, data_len, out);
+//	}
+
+	if(qoip_expand_opcodes(op_cnt, ops, &(q->run1_len), &(q->index1_maxval)))
+		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
+
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set_desc);
 	chunks_len = data_len;
-	if(channels==4) {
-		for (px_pos = 0; px_pos < px_len; px_pos += 4) {
+	if(q->channels==4) {
+		for (px_pos = 0; px_pos < q->px_len; px_pos += 4) {
 			if (q->run > 0)
 				--q->run;
 			else if (q->p < chunks_len) {
@@ -922,7 +962,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		}
 	}
 	else {
-		for (px_pos = 0; px_pos < px_len; px_pos += 3) {
+		for (px_pos = 0; px_pos < q->px_len; px_pos += 3) {
 			if (q->run > 0)
 				--q->run;
 			else if (q->p < chunks_len) {
