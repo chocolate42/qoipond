@@ -136,6 +136,7 @@ enum{
 	OP_A,
 	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
 	OP_DIFF, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_RGB3,
+	OP_DELTA,
 	/* new_op id goes here */
 	OP_END
 };
@@ -357,7 +358,7 @@ static int qoip_enc_rgb3(qoip_working_t *q, u8 opcode) {
 		q->vr >  -65 && q->vr <  64 &&
 		q->vb >  -65 && q->vb <  64
 	) {
-		q->out[q->p++] = opcode                     | ((q->vr + 64) >> 1);
+		q->out[q->p++] = opcode                    | ((q->vr + 64) >> 1);
 		q->out[q->p++] = q->px.rgba.g;
 		q->out[q->p++] = (((q->vr + 64) & 1) << 7) | (q->vb + 64);
 		return 1;
@@ -371,6 +372,67 @@ static void qoip_dec_rgb3(qoip_working_t *q) {
 	q->px.rgba.r += (((b1 & 0x3f) << 1) | ((b3) >> 7)) - 64;
 	q->px.rgba.g  = b2;
 	q->px.rgba.b += (b3 & 0x7f) - 64;
+}
+
+static int qoip_enc_delta(qoip_working_t *q, u8 opcode) {
+	if (
+		q->va == 0 &&
+		q->vr > -2 && q->vr < 2 &&
+		q->vg > -2 && q->vg < 2 &&
+		q->vb > -2 && q->vb < 2
+	) {
+		q->out[q->p++] = opcode | (((q->vb + 1) * 9) + ((q->vg + 1) * 3) + (q->vr + 1));
+		return 1;
+	}
+	else if (
+		q->va == 0 &&
+		((q->vr<0?-q->vr:q->vr)+(q->vg<0?-q->vg:q->vg)+(q->vb<0?-q->vb:q->vb))==2
+	) {
+		if(q->vr==2)
+			q->out[q->p++] = opcode + 13;
+		else if(q->vr==-2)
+			q->out[q->p++] = opcode + 27;
+		else if(q->vg==2)
+			q->out[q->p++] = opcode + 28;
+		else if(q->vg==-2)
+			q->out[q->p++] = opcode + 29;
+		else if(q->vb==2)
+			q->out[q->p++] = opcode + 30;
+		else
+			q->out[q->p++] = opcode + 31;
+		return 1;
+	}
+	return 0;
+}
+static void qoip_dec_delta(qoip_working_t *q) {
+	int b1=q->in[q->p++]&31;
+	switch(b1){
+		case 13:
+			q->px.rgba.r += 2;
+			break;
+		case 27:
+			q->px.rgba.r -= 2;
+			break;
+		case 28:
+			q->px.rgba.g += 2;
+			break;
+		case 29:
+			q->px.rgba.g -= 2;
+			break;
+		case 30:
+			q->px.rgba.b += 2;
+			break;
+		case 31:
+			q->px.rgba.b -= 2;
+			break;
+		default:
+			q->px.rgba.r += ((b1 % 3) - 1);
+			b1/=3;
+			q->px.rgba.g += ((b1 % 3) - 1);
+			b1/=3;
+			q->px.rgba.b += ((b1 % 3) - 1);
+			break;
+	}
 }
 
 /* new_op encode/decode functions go here */
@@ -393,6 +455,7 @@ static const opdef_t qoip_ops[] = {
 	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, vg_r -32..31, vg -64..63, vg_b -32..31", qoip_enc_luma3_676, qoip_dec_luma3_676, 8},
 	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7  va -16..15", qoip_enc_luma3_4645, qoip_dec_luma3_4645, 8},
 	{OP_RGB3,       MASK_2, QOIP_SET_LEN3, "OP_RGB3:       3 byte delta,   vr -64..63,  g,           vb -64..63", qoip_enc_rgb3, qoip_dec_rgb3, 64},
+	{OP_DELTA,      MASK_3, QOIP_SET_LEN1, "OP_DELTA:      1 byte delta,   vr  -1..1,  vg  -1..1,    vb  -1..1, and (+-2,0,0),(0,+-2,0),(0,0,+-2)", qoip_enc_delta, qoip_dec_delta, 32},
 	/* new_op definitions go here*/
 	{OP_END},
 };

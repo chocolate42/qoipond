@@ -87,11 +87,11 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	These sets are non-overlapping */
 	qoip_set_t set[] = {
 		{
-			{2,4,7},
-			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_END, OP_INDEX2},
-			{32, 64, 16, 128, 8, 0, 4},
+			{2,4,5},
+			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_END, OP_INDEX3, OP_INDEX2},
+			{32, 64, 16, 128, 0, 8, 4},
 		},
-		{ {1,2,2}, {OP_DIFF, OP_LUMA1_232}, {64, 128} },
+		{ {1,2,3}, {OP_DIFF, OP_LUMA1_232, OP_DELTA}, {64, 128, 32} },
 		{ {1,2,2}, {OP_LUMA2_464, OP_END}, {64, 0} },
 		{ {2,2,3}, {OP_END, OP_RGB3, OP_LUMA3_676}, {0, 64, 8} },
 		{ {1,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },/* alpha */
@@ -105,7 +105,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
 		"",/*Whatever the default currently is */
-		"03080a",     /* QOI */
+		//"03080a",     /* QOI */
+		"0001020a0e", /* index7 + delta */
 		"0004090a0b0c", /*delta 9h */
 		/* demo28 TODO */
 	};
@@ -132,6 +133,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	if(level==0) {
 		if(count)
 			*count=cnt;
+		if(*out_len!=currbest_len)
+			qoip_encode(data, desc, out, out_len, currbest_str);
 		return 0;
 	}
 
