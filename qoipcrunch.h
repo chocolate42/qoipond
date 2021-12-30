@@ -73,19 +73,21 @@ static int qoipcrunch_iterate(int level, qoip_set_t *set, int set_cnt, int *inde
 
 int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level, size_t *count) {
 	char currbest_str[256], opstring[256], opstring2[256];
-	int i[5]={0}, j, opcnt, opstring_loc, opstring2_loc;
+	int i[8]={0}, j, opcnt, opstring_loc, opstring2_loc;
 	size_t currbest_len;
 	size_t cnt = 0;
 	int standalone_use;
 	u64 standalone_mask;
-	int isrgb = desc->channels==3;
+	int isrgb = desc->channels==3 ? 1 : 0;
+	int set_cnt = isrgb ? 5 : 6;/* avoid alpha ops */
+	int standalone_cnt = isrgb ? 1 : 2;/* avoid alpha ops */
 
 	/* Sets of ops where one op must be chosen from each set
 	OP_END indicates that "no op" is a valid choice from a set
 	These sets are non-overlapping */
-	qoip_set_t set_generic[] = {
+	qoip_set_t set[] = {
 		{
-			{1,3,8},
+			{1,2,8},
 			{OP_RUN1_4, OP_RUN1_3, OP_RUN1_5, OP_RUN1_6, OP_RUN1_7, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0},
 			{16, 8, 32, 64, 128, 4, 2, 1},
 		},
@@ -94,38 +96,18 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_INDEX2, OP_END},
 			{32, 64, 16, 128, 8, 4, 0},
 		},
-		{ {2,3,3}, {OP_END, OP_DIFF, OP_LUMA1_232}, {0, 64, 128} },
-		{ {2,2,2}, {OP_END, OP_LUMA2_464}, {0, 64} },
+		{ {1,2,2}, {OP_DIFF, OP_LUMA1_232}, {64, 128} },
+		{ {1,2,2}, {OP_LUMA2_464, OP_END}, {64, 0} },
 		{ {2,2,3}, {OP_END, OP_RGB3, OP_LUMA3_676}, {0, 64, 8} },
-		{ {2,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },
+		{ {2,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },/* alpha */
 	};
-	int set_generic_cnt = 6;
-
-	qoip_set_t set_rgb[] = {
-		{
-			{1,3,8},
-			{OP_RUN1_4, OP_RUN1_3, OP_RUN1_5, OP_RUN1_6, OP_RUN1_7, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0},
-			{16, 8, 32, 64, 128, 4, 2, 1},
-		},
-		{
-			{2,4,7},
-			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_INDEX2, OP_END},
-			{32, 64, 16, 128, 8, 4, 0},
-		},
-		{ {2,3,3}, {OP_END, OP_DIFF, OP_LUMA1_232}, {0, 64, 128} },
-		{ {2,2,2}, {OP_END, OP_LUMA2_464}, {0, 64} },
-		{ {2,2,3}, {OP_END, OP_RGB3, OP_LUMA3_676}, {0, 64, 8} },
-	};
-	int set_rgb_cnt = 5;
 
 	/* 8 bit tags that can be toggled present or not. These tags may overlap RUN1
 	encoding as long as at least 1 op remains for RLE. OP_RGB and OP_RGBA not included
-	as they are implicit.Alpha tags at end for easy RGB path */
-	int standalone[] = {OP_RUN2, OP_A}, standalone_generic_cnt = 2, standalone_rgb_cnt = 1;
+	as they are implicit, as is OP_RUN2. Alpha tags at end for easy RGB path */
+	int standalone[] = {OP_INDEX8, OP_A};
 
-	qoip_set_t *set;
-	int set_cnt, standalone_cnt;
-
+	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
 		"",/*Whatever the default currently is */
 		"0001050d1213",     /* QOI */
@@ -136,7 +118,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	currbest_len = qoip_maxsize(desc);
 
-	if(level==-1) {
+	if(level==-1) {/* Do default opstring only */
 		if(qoip_encode(data, desc, out, out_len, NULL))
 			return 1;
 		++cnt;
@@ -144,57 +126,54 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 			*count=cnt;
 		return 0;
 	}
-	else if(level==0) {
-		for(j=0;j<common_cnt;++j) {
-			if(qoip_encode(data, desc, out, out_len, common[j]))
-				return 1;
-			qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, common[j]);
-			++cnt;
-		}
+
+	/* Do common opstrings for level>=0 */
+	for(j=0;j<common_cnt;++j) {
+		if(qoip_encode(data, desc, out, out_len, common[j]))
+			return 1;
+		qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, common[j]);
+		++cnt;
 	}
-	else {
-		/* Also do level 0 here to make level>0 a superset of level 0 */
-		for(j=0;j<common_cnt;++j) {
-			if(qoip_encode(data, desc, out, out_len, common[j]))
-				return 1;
-			qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, common[j]);
-			++cnt;
-		}
-		/* Search RGB-only ops if input is RGB */
-		set = isrgb ? set_rgb : set_generic;
-		set_cnt = isrgb ? set_rgb_cnt : set_generic_cnt;
-		standalone_cnt = isrgb ? standalone_rgb_cnt : standalone_generic_cnt;
-		do {
-			opcnt=0;
+	if(level==0) {
+		if(count)
+			*count=cnt;
+		return 0;
+	}
+
+	do {/* Level 1-3 */
+		opcnt=0;
+		for(j=0;j<set_cnt;++j)
+			opcnt+=set[j].codespace[i[j]];
+		/* Always add OP_RGB and OP_RUN2, add OP_RGBA if source is RGBA */
+		opcnt += isrgb?2:3;
+		if(opcnt>=240 && opcnt<=256 && ((opcnt-256)<set[0].codespace[i[0]])) {
+			opstring_loc=sprintf(opstring, "%02x%02x", OP_RGB, OP_RUN2);
+			if(!isrgb)
+				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_RGBA);
 			for(j=0;j<set_cnt;++j) {
-				opcnt+=set[j].codespace[i[j]];
+				if(set[j].ops[i[j]]!=OP_END)
+					opstring_loc+=sprintf(opstring+opstring_loc, "%02x", set[j].ops[i[j]]);
 			}
-			if(opcnt>=240 && opcnt<=256 && ((opcnt-(isrgb?255:254))<set[0].codespace[i[0]])) {
-				opstring_loc=sprintf(opstring, "00%s", isrgb?"":"01");
-				for(j=0;j<set_cnt;++j) {
-					if(set[j].ops[i[j]]!=OP_END)
-						opstring_loc+=sprintf(opstring+opstring_loc, "%02x", set[j].ops[i[j]]);
-				}
-				standalone_use=0;
-				for(standalone_mask=0; standalone_mask < (1<<standalone_cnt); ++standalone_mask ) {
-					strcpy(opstring2, opstring);
-					opstring2_loc=opstring_loc;
-					for(j=0;j<standalone_cnt;++j) {
-						if(standalone_mask & (1<<j)) {
-							opstring2_loc+=sprintf(opstring2+opstring2_loc, "%02x", standalone[j]);
-							++standalone_use;
-						}
-					}
-					if( ((standalone_use + opcnt - (isrgb?255:254))<set[0].codespace[i[0]]) ) {
-						if(qoip_encode(data, desc, out, out_len, opstring2))
-							return 1;
-						++cnt;
+			standalone_use=0;
+			for(standalone_mask=0; standalone_mask < (1<<standalone_cnt); ++standalone_mask ) {
+				strcpy(opstring2, opstring);
+				opstring2_loc=opstring_loc;
+				for(j=0;j<standalone_cnt;++j) {
+					if(standalone_mask & (1<<j)) {
+						opstring2_loc+=sprintf(opstring2+opstring2_loc, "%02x", standalone[j]);
+						++standalone_use;
 					}
 				}
-				qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, opstring2);
+				if( ((standalone_use + opcnt - 256)<set[0].codespace[i[0]]) ) {
+					if(qoip_encode(data, desc, out, out_len, opstring2))
+						return 1;
+					++cnt;
+				}
 			}
-		} while(!qoipcrunch_iterate(level-1, set, set_cnt, i));
-	}
+			qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, opstring2);
+		}
+	} while(!qoipcrunch_iterate(level-1, set, set_cnt, i));
+
 	if(count)
 		*count=cnt;
 
