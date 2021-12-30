@@ -105,8 +105,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
 		"",/*Whatever the default currently is */
-		"0001050a0c",     /* QOI */
-		"000102060b0c0d0e", /*delta 9h */
+		"03080a",     /* QOI */
+		"0004090a0b0c", /*delta 9h */
 		/* demo28 TODO */
 	};
 	int common_cnt = 3;
@@ -136,14 +136,11 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	}
 
 	do {/* Level 1-3 */
-		opcnt=2;/* Reserve space for OP_RGB and RUN2 */
+		opcnt=3;/* Reserve space for OP_RGB/OP_RGBA/RUN2 */
 		for(j=0;j<set_cnt;++j)
 			opcnt+=set[j].codespace[i[j]];
-		opcnt += isrgb?0:1;/* Add OP_RGBA if source is RGBA */
 		if(opcnt>=192 && opcnt<256) {
-			opstring_loc=sprintf(opstring, "%02x", OP_RGB);
-			if(!isrgb)
-				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_RGBA);
+			opstring_loc=0;
 			for(j=0;j<set_cnt;++j) {
 				if(set[j].ops[i[j]]!=OP_END)
 					opstring_loc+=sprintf(opstring+opstring_loc, "%02x", set[j].ops[i[j]]);
