@@ -88,13 +88,13 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	qoip_set_t set[] = {
 		{
 			{2,4,7},
-			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_INDEX2, OP_END},
-			{32, 64, 16, 128, 8, 4, 0},
+			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_END, OP_INDEX2},
+			{32, 64, 16, 128, 8, 0, 4},
 		},
 		{ {1,2,2}, {OP_DIFF, OP_LUMA1_232}, {64, 128} },
 		{ {1,2,2}, {OP_LUMA2_464, OP_END}, {64, 0} },
 		{ {2,2,3}, {OP_END, OP_RGB3, OP_LUMA3_676}, {0, 64, 8} },
-		{ {2,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },/* alpha */
+		{ {1,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },/* alpha */
 	};
 
 	/* 8 bit tags that can be toggled present or not. These tags may overlap RUN1
@@ -105,8 +105,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
 		"",/*Whatever the default currently is */
-		"0001050a0b",     /* QOI */
-		"000102060b0d0e0f", /*delta 9h */
+		"0001050a0c",     /* QOI */
+		"000102060b0c0d0e", /*delta 9h */
 		/* demo28 TODO */
 	};
 	int common_cnt = 3;
@@ -136,7 +136,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	}
 
 	do {/* Level 1-3 */
-		opcnt=2;/* Reserve space for OP_RGB and RUN */
+		opcnt=2;/* Reserve space for OP_RGB and RUN2 */
 		for(j=0;j<set_cnt;++j)
 			opcnt+=set[j].codespace[i[j]];
 		opcnt += isrgb?0:1;/* Add OP_RGBA if source is RGBA */
@@ -158,7 +158,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 						++standalone_use;
 					}
 				}
-				if( ((standalone_use + opcnt - 256)<set[0].codespace[i[0]]) ) {
+				if((standalone_use+opcnt)<256) {
 					if(qoip_encode(data, desc, out, out_len, opstring2))
 						return 1;
 					++cnt;

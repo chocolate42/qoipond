@@ -135,7 +135,7 @@ index into it. Less kludgey implementation TODO */
 enum{
 	OP_RGB, OP_RGBA, OP_A,
 	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
-	OP_DIFF, OP_LUMA2_464, OP_RGB3, OP_LUMA1_232, OP_LUMA3_676, OP_LUMA3_4645,
+	OP_DIFF, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_RGB3,
 	/* new_op id goes here */
 	OP_END
 };
@@ -441,11 +441,11 @@ static const opdef_t qoip_ops[] = {
 	{OP_INDEX2, MASK_6, QOIP_SET_INDEX1, "OP_INDEX2: 1 byte,   4 value index cache", qoip_enc_index, qoip_dec_index2,   4},
 
 	{OP_DIFF,       MASK_2, QOIP_SET_LEN1, "OP_DIFF:       1 byte delta,   vr  -2..1,  vg  -2..1,    vb  -2..1", qoip_enc_diff, qoip_dec_diff, 64},
-	{OP_LUMA2_464,  MASK_2, QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7", qoip_enc_luma2_464, qoip_dec_luma2_464, 64},
-	{OP_RGB3,       MASK_2, QOIP_SET_LEN3, "OP_RGB3:       3 byte delta,   vr -64..63,  g,           vb -64..63", qoip_enc_rgb3, qoip_dec_rgb3, 64},
 	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, vg_r  -2..1,  vg  -4..3,  vg_b  -2..1", qoip_enc_luma1_232, qoip_dec_luma1_232, 128},
+	{OP_LUMA2_464,  MASK_2, QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7", qoip_enc_luma2_464, qoip_dec_luma2_464, 64},
 	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, vg_r -32..31, vg -64..63, vg_b -32..31", qoip_enc_luma3_676, qoip_dec_luma3_676, 8},
 	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7  va -16..15", qoip_enc_luma3_4645, qoip_dec_luma3_4645, 8},
+	{OP_RGB3,       MASK_2, QOIP_SET_LEN3, "OP_RGB3:       3 byte delta,   vr -64..63,  g,           vb -64..63", qoip_enc_rgb3, qoip_dec_rgb3, 64},
 	/* new_op definition goes here*/
 	{OP_END}
 };
@@ -626,31 +626,31 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 	int i=0, num, index1_present=0;
 	*op_cnt = 0;
 	for(;opstr[i];++i) {
-		if(i==OP_END)
+		if(i==(2*OP_END))
 			return 1;/* More ops defined than exist in the implementation */
 		num = qoip_valid_char(opstr[i]);
 		if(num == -1)
-			return 1;/* First char failed the number test */
+			return 2;/* First char failed the number test */
 		++i;
 		if(qoip_valid_char(opstr[i]) == -1)
-			return 1;/* Second char failed the number test */
+			return 3;/* Second char failed the number test */
 		num = (num<<4) | qoip_valid_char(opstr[i]);
 		if(num>=OP_END)
-			return 1;/* An op is defined beyond the largest op in the implementation */
+			return 4;/* An op is defined beyond the largest op in the implementation */
 		ops[*op_cnt].id=num;
 		++*op_cnt;
 	}
 	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	for(i=1;i<*op_cnt;++i) {
 		if(ops[i].id==ops[i-1].id)
-			return 1;/* Repeated opcode */
+			return 5;/* Repeated opcode */
 	}
 	for(i=0;i<*op_cnt;++i) {
 		if(qoip_ops[ops[i].id].set == QOIP_SET_INDEX1)
 			++index1_present;
 	}
 	if(index1_present>1)
-		return 1;/* Multiple 1 byte run or index encodings, invalid combination */
+		return 6;/* Multiple 1 byte run or index encodings, invalid combination */
 	return 0;
 }
 
@@ -775,7 +775,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 
 	if(opstring == NULL || *opstring==0)
-		opstring = "000102060a0b0c";/* Default, propA */
+		opstring = "000102060a0c0f";/* Default, propA */
 	if((opstr_len=strlen(opstring))%2)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
 	if(opstr_len>512)
@@ -786,11 +786,10 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	qsort(opstr, opstr_len/2, 2, qoip_opstring_comp_id);
 	if(parse_opstring(opstr, ops, &op_cnt))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
-	/* Write header before run2 is potentially extracted from ops */
-	qoip_write_file_header(q->out, &(q->p), desc);
-	qoip_write_bitstream_header(q->out, &q->p, desc, ops, op_cnt);
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to expand opstring");
+	qoip_write_file_header(q->out, &(q->p), desc);
+	qoip_write_bitstream_header(q->out, &q->p, desc, ops, op_cnt);
 
 	q->px_prev.v = 0;
 	q->px_prev.rgba.a = 255;
@@ -906,7 +905,8 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 						}
 					}
 				}
-				q->index[QOIP_COLOR_HASH(q->px) & q->index1_maxval] = q->px;
+				q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px;
+				q->index2[QOIP_COLOR_HASH(q->px) & 0xff] = q->px;
 			}
 			q->out[px_pos + 0] = q->px.rgba.r;
 			q->out[px_pos + 1] = q->px.rgba.g;
