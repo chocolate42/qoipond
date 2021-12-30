@@ -77,20 +77,15 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	size_t currbest_len;
 	size_t cnt = 0;
 	int standalone_use;
-	u64 standalone_mask;
+	int standalone_mask;
 	int isrgb = desc->channels==3 ? 1 : 0;
-	int set_cnt = isrgb ? 5 : 6;/* avoid alpha ops */
+	int set_cnt = isrgb ? 4 : 5;/* avoid alpha ops */
 	int standalone_cnt = isrgb ? 1 : 2;/* avoid alpha ops */
 
 	/* Sets of ops where one op must be chosen from each set
 	OP_END indicates that "no op" is a valid choice from a set
 	These sets are non-overlapping */
 	qoip_set_t set[] = {
-		{
-			{1,2,8},
-			{OP_RUN1_4, OP_RUN1_3, OP_RUN1_5, OP_RUN1_6, OP_RUN1_7, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0},
-			{16, 8, 32, 64, 128, 4, 2, 1},
-		},
 		{
 			{2,4,7},
 			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_INDEX3, OP_INDEX2, OP_END},
@@ -110,8 +105,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
 		"",/*Whatever the default currently is */
-		"0001050d1213",     /* QOI */
-		"00010203070e13151617",    /* delta9h */
+		"0001050a0b",     /* QOI */
+		"000102060b0d0e0f", /*delta 9h */
 		/* demo28 TODO */
 	};
 	int common_cnt = 3;
@@ -141,13 +136,12 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	}
 
 	do {/* Level 1-3 */
-		opcnt=0;
+		opcnt=2;/* Reserve space for OP_RGB and RUN */
 		for(j=0;j<set_cnt;++j)
 			opcnt+=set[j].codespace[i[j]];
-		/* Always add OP_RGB and OP_RUN2, add OP_RGBA if source is RGBA */
-		opcnt += isrgb?2:3;
-		if(opcnt>=240 && opcnt<=256 && ((opcnt-256)<set[0].codespace[i[0]])) {
-			opstring_loc=sprintf(opstring, "%02x%02x", OP_RGB, OP_RUN2);
+		opcnt += isrgb?0:1;/* Add OP_RGBA if source is RGBA */
+		if(opcnt>=192 && opcnt<256) {
+			opstring_loc=sprintf(opstring, "%02x", OP_RGB);
 			if(!isrgb)
 				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_RGBA);
 			for(j=0;j<set_cnt;++j) {

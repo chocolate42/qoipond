@@ -133,11 +133,9 @@ than at the end. Doing this allows for basic backwards compatibility.
 The order of this enum must match the order of qoip_ops[] as these values are an
 index into it. Less kludgey implementation TODO */
 enum{
-	OP_RGB, OP_RGBA, OP_A, OP_RUN2,
-	OP_RUN1_7, OP_RUN1_6, OP_RUN1_5, OP_RUN1_4, OP_RUN1_3, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0,
-	OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
+	OP_RGB, OP_RGBA, OP_A,
+	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
 	OP_DIFF, OP_LUMA2_464, OP_RGB3, OP_LUMA1_232, OP_LUMA3_676, OP_LUMA3_4645,
-	OP_INDEX8,
 	/* new_op id goes here */
 	OP_END
 };
@@ -154,7 +152,7 @@ enum{
 
 /* Defines which set an op belongs to. The order of this enum determines
 the order ops are sorted for encode/decode. Modify with caution. */
-enum{QOIP_SET_RUN1, QOIP_SET_RUN2, QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4, QOIP_SET_LEN5};
+enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4, QOIP_SET_LEN5};
 
 /* Decode masks */
 enum{MASK_1=0x80, MASK_2=0xc0, MASK_3=0xe0, MASK_4=0xf0, MASK_5=0xf8, MASK_6=0xfc, MASK_7=0xfe, MASK_8=0xff};
@@ -167,7 +165,7 @@ typedef union {
 /* All working variables needed by a single encode/decode run */
 typedef struct {
 	size_t p, px_len;
-	int channels, run, run1_len, index1_maxval;
+	int channels, run, run1_len, run2_len, index1_maxval;
 	unsigned char *out;
 	const unsigned char *in;
 	qoip_rgba_t index[128], index2[256], px, px_prev;
@@ -426,37 +424,6 @@ static void qoip_dec_rgba(qoip_working_t *q) {
 	q->px.rgba.a = q->in[q->p++];
 }
 
-static void qoip_dec_run1_7(qoip_working_t *q) {
-	q->run = (q->in[q->p++] & 0x7f);
-}
-static void qoip_dec_run1_6(qoip_working_t *q) {
-	q->run = (q->in[q->p++] & 0x3f);
-}
-static void qoip_dec_run1_5(qoip_working_t *q) {
-	q->run = (q->in[q->p++] & 0x1f);
-}
-static void qoip_dec_run1_4(qoip_working_t *q) {
-	q->run = (q->in[q->p++] & 0x0f);
-}
-static void qoip_dec_run1_3(qoip_working_t *q) {
-	q->run = (q->in[q->p++] & 0x07);
-}
-static void qoip_dec_run1_2(qoip_working_t *q) {
-	q->run = (q->in[q->p++] & 0x03);
-}
-static void qoip_dec_run1_1(qoip_working_t *q) {
-	q->run = (q->in[q->p++] & 0x01);
-}
-static void qoip_dec_run1_0(qoip_working_t *q) {
-	q->run = 0;
-	q->p++;
-}
-
-static void qoip_dec_run2(qoip_working_t *q) {
-	++q->p;
-	q->run = q->in[q->p++];
-}
-
 /* new_op encode/decode functions go here */
 
 /* For ease of implementation treat qoip_ops the same as the opcode enum.
@@ -465,17 +432,7 @@ static const opdef_t qoip_ops[] = {
 	{OP_RGB,    MASK_8, QOIP_SET_LEN4, "OP_RGB:  4 byte, store RGB  verbatim", qoip_enc_rgb, qoip_dec_rgb, 1},
 	{OP_RGBA,   MASK_8, QOIP_SET_LEN5, "OP_RGBA: 5 byte, store RGBA verbatim", qoip_enc_rgba, qoip_dec_rgba, 1},
 	{OP_A,      MASK_8, QOIP_SET_LEN2, "OP_A:    2 byte, store    A verbatim", qoip_enc_a, qoip_dec_a, 1},
-	{OP_RUN2,   MASK_8, QOIP_SET_RUN2, "OP_RUN2:   2 byte, 256 value RLE", NULL, qoip_dec_run2, 1},
-
-	{OP_RUN1_7, MASK_1, QOIP_SET_RUN1, "OP_RUN1_7: 1 byte, 128 value RLE", NULL, qoip_dec_run1_7, 128},
-	{OP_RUN1_6, MASK_2, QOIP_SET_RUN1, "OP_RUN1_6: 1 byte,  64 value RLE", NULL, qoip_dec_run1_6,  64},
-	{OP_RUN1_5, MASK_3, QOIP_SET_RUN1, "OP_RUN1_5: 1 byte,  32 value RLE", NULL, qoip_dec_run1_5,  32},
-	{OP_RUN1_4, MASK_4, QOIP_SET_RUN1, "OP_RUN1_4: 1 byte,  16 value RLE", NULL, qoip_dec_run1_4,  16},
-	{OP_RUN1_3, MASK_5, QOIP_SET_RUN1, "OP_RUN1_3: 1 byte,   8 value RLE", NULL, qoip_dec_run1_3,   8},
-	{OP_RUN1_2, MASK_6, QOIP_SET_RUN1, "OP_RUN1_2: 1 byte,   4 value RLE", NULL, qoip_dec_run1_2,   4},
-	{OP_RUN1_1, MASK_7, QOIP_SET_RUN1, "OP_RUN1_1: 1 byte,   2 value RLE", NULL, qoip_dec_run1_1,   2},
-	{OP_RUN1_0, MASK_8, QOIP_SET_RUN1, "OP_RUN1_0: 1 byte,   1 value RLE", NULL, qoip_dec_run1_0,   1},
-
+	{OP_INDEX8, MASK_8, QOIP_SET_INDEX2, "OP_INDEX8: 2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8, 1},
 	{OP_INDEX7, MASK_1, QOIP_SET_INDEX1, "OP_INDEX7: 1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index7, 128},
 	{OP_INDEX6, MASK_2, QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index6,  64},
 	{OP_INDEX5, MASK_3, QOIP_SET_INDEX1, "OP_INDEX5: 1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index5,  32},
@@ -489,7 +446,6 @@ static const opdef_t qoip_ops[] = {
 	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, vg_r  -2..1,  vg  -4..3,  vg_b  -2..1", qoip_enc_luma1_232, qoip_dec_luma1_232, 128},
 	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, vg_r -32..31, vg -64..63, vg_b -32..31", qoip_enc_luma3_676, qoip_dec_luma3_676, 8},
 	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7  va -16..15", qoip_enc_luma3_4645, qoip_dec_luma3_4645, 8},
-	{OP_INDEX8,   MASK_8, QOIP_SET_INDEX2, "OP_INDEX8:    2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8, 1},
 	/* new_op definition goes here*/
 	{OP_END}
 };
@@ -525,11 +481,6 @@ static int qoip_op_comp_set(const void *a, const void *b) {
 		return 0;
 	else
 		return ( ((qoip_opcode_t *)a)->set < ((qoip_opcode_t *)b)->set ) ? -1: 1;
-}
-
-/* Order to be tried on decode */
-static int qoip_op_comp_set_desc(const void *a, const void *b) {
-	return -qoip_op_comp_set(a, b);
 }
 
 static u32 qoip_read_32(const unsigned char *bytes, size_t *p) {
@@ -672,7 +623,7 @@ static inline int qoip_valid_char(u8 chr) {
 }
 
 static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
-	int i=0, num, run_present=0, run1_present=0, index1_present=0;
+	int i=0, num, index1_present=0;
 	*op_cnt = 0;
 	for(;opstr[i];++i) {
 		if(i==OP_END)
@@ -695,78 +646,57 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 			return 1;/* Repeated opcode */
 	}
 	for(i=0;i<*op_cnt;++i) {
-		if(qoip_ops[ops[i].id].set == QOIP_SET_RUN1) {
-			++run1_present;
-			++run_present;
-		}
-		else if(qoip_ops[ops[i].id].set == QOIP_SET_INDEX1)
+		if(qoip_ops[ops[i].id].set == QOIP_SET_INDEX1)
 			++index1_present;
 	}
-	if(run1_present>1 || index1_present>1)
+	if(index1_present>1)
 		return 1;/* Multiple 1 byte run or index encodings, invalid combination */
-	if(!run_present)
-		return 1;/* There needs to be some kind of run op, not necessarily 1 byte */
 	return 0;
 }
 
 /* Generate everything related to an opcode, including the opcode itself */
-static int qoip_expand_opcodes(u8 op_cnt, qoip_opcode_t *ops, int *run1_len, int *index1_maxval) {
-	int i, op = 0, overlap_loc=-1, run1=0;
-	for(i=0;i<op_cnt;++i) {
+static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *q) {
+	int i, op = 0;
+	for(i=0;i<*op_cnt;++i) {
 		ops[i].mask = qoip_ops[ops[i].id].mask;
 		ops[i].set  =  qoip_ops[ops[i].id].set;
 		ops[i].enc  =  qoip_ops[ops[i].id].enc;
 		ops[i].dec  =  qoip_ops[ops[i].id].dec;
 		ops[i].opcnt  =  qoip_ops[ops[i].id].opcnt;
+		if(ops[i].set==QOIP_SET_INDEX1)
+			q->index1_maxval = ops[i].opcnt - 1;
 	}
 
-	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
-	for(i=0;i<op_cnt;++i) {
-		if(op==256)/* If there is overlap */
-			break;
+	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
+	for(i=0;i<*op_cnt;++i) {
 		ops[i].opcode = op;
 		op += ops[i].opcnt;
-		if(ops[i].set==QOIP_SET_RUN1) {
-			overlap_loc = op - 1;
-			run1 = ops[i].opcnt;
-		}
-		else if(index1_maxval && ops[i].set==QOIP_SET_INDEX1)
-			*index1_maxval = ops[i].opcnt - 1;
 	}
-	for(;i<op_cnt;++i) {/* overlapping */
-		if(ops[i].mask != 0xff)
-			return 1;/* overlapping op must be 8 bit tag */
-		if(overlap_loc==-1)
-			return 1;/* nowhere to put overlapping tag */
-		ops[i].opcode = overlap_loc;
-		--overlap_loc;
-		--run1;
-	}
-	if(run1_len)
-		*run1_len = run1;
+	if(op>255)/* Too many ops */
+		return 1;
+	q->run2_len=256;
+	q->run2_opcode = op;
+	++op;
+	q->run1_opcode=op;
+	q->run1_len = 256 - q->run1_opcode;
+	//if(q->run2_len!=-1) {/*run2 present, extend the number of storable values */
+	//	q->run2_len += q->run1_len;
+	//}
 	return 0;
 }
 
 static inline void qoip_encode_run(qoip_working_t *q) {
-	if(q->run) {
-		if(q->run2_opcode) {
-			for(; q->run>=256; q->run-=256) {
-				q->out[q->p++] = q->run2_opcode;
-				q->out[q->p++] = 255;
-			}
-			if(q->run>q->run1_len) {
-				q->out[q->p++] = q->run2_opcode;
-				q->out[q->p++] = q->run - 1;
-			}
-			else if(q->run)
-				q->out[q->p++] = q->run1_opcode | (q->run - 1);
-		}
-		else {
-			for(; q->run>q->run1_len; q->run-=q->run1_len)
-				q->out[q->p++] = q->run1_opcode | (q->run1_len - 1);
-			if(q->run)
-				q->out[q->p++] = q->run1_opcode | (q->run - 1);
-		}
+	for(; q->run>=256; q->run-=256) {
+		q->out[q->p++] = q->run2_opcode;
+		q->out[q->p++] = 255;
+	}
+	if(q->run>q->run1_len) {
+		q->out[q->p++] = q->run2_opcode;
+		q->out[q->p++] = q->run - 1;
+		q->run = 0;
+	}
+	else if(q->run) {
+		q->out[q->p++] = q->run1_opcode + (q->run - 1);
 		q->run = 0;
 	}
 }
@@ -822,7 +752,7 @@ typedef struct {
 	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
-int qoip_fastpath_cnt = 1;
+int qoip_fastpath_cnt = 0;/*disable for run1 rework until implemented TODO*/
 static const qoip_fastpath_t qoip_fastpath[] = {
 	{"00010203060e121314", qoip_encode_default, qoip_decode_default},
 };
@@ -830,23 +760,22 @@ static const qoip_fastpath_t qoip_fastpath[] = {
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
 	char opstr[513];
 	size_t px_pos, opstr_len;
-	int i, opstore_cnt, op_cnt = 0;
+	int i, op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
-	qoip_opcode_t opstore[OP_END], *op = NULL;
+	qoip_opcode_t ops[OP_END];
 	q->out = (unsigned char *) out;
 	q->in = (const unsigned char *)data;
 
 	if (
 		data == NULL || desc == NULL || out == NULL || out_len == NULL ||
 		desc->width == 0 || desc->height == 0 ||
-		desc->channels < 3 || desc->channels > 4 ||
-		desc->colorspace > 1
+		desc->channels < 3 || desc->channels > 4 || desc->colorspace > 1
 	)
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 
 	if(opstring == NULL || *opstring==0)
-		opstring = "00010203060e121314";/* Default, propA */
+		opstring = "000102060a0b0c";/* Default, propA */
 	if((opstr_len=strlen(opstring))%2)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
 	if(opstr_len>512)
@@ -855,12 +784,13 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	for(i=0;i<opstr_len;++i)/*lowercase*/
 		opstr[i] += (opstr[i]>64 && opstr[i]<71) ? 32 : 0;
 	qsort(opstr, opstr_len/2, 2, qoip_opstring_comp_id);
-	if(parse_opstring(opstr, opstore, &opstore_cnt))
+	if(parse_opstring(opstr, ops, &op_cnt))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
-	if(qoip_expand_opcodes(opstore_cnt, opstore, &(q->run1_len), &(q->index1_maxval)))
-		return qoip_ret(1, stderr, "qoip_encode: Failed to expand opstring");
+	/* Write header before run2 is potentially extracted from ops */
 	qoip_write_file_header(q->out, &(q->p), desc);
-	qoip_write_bitstream_header(q->out, &q->p, desc, opstore, opstore_cnt);
+	qoip_write_bitstream_header(q->out, &q->p, desc, ops, op_cnt);
+	if(qoip_expand_opcodes(&op_cnt, ops, q))
+		return qoip_ret(1, stderr, "qoip_encode: Failed to expand opstring");
 
 	q->px_prev.v = 0;
 	q->px_prev.rgba.a = 255;
@@ -874,24 +804,11 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	}
 
 	/* Sort ops into order they should be tested on encode */
-	qsort(opstore, opstore_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set);
-	/* Extract run ops to be handled directly */
-	for(i=0; i<opstore_cnt; ++i) {
-		if(opstore[i].set==QOIP_SET_RUN1)
-			q->run1_opcode = opstore[i].opcode;
-		else if(opstore[i].set==QOIP_SET_RUN2)
-			q->run2_opcode = opstore[i].opcode;
-		else {
-			op=opstore+i;
-			op_cnt=opstore_cnt-i;
-			break;
-		}
-	}
-
+	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set);
 	if(q->channels==4) {
 		for (px_pos = 0; px_pos < q->px_len; px_pos += 4) {
 			q->px = *(qoip_rgba_t *)(q->in + px_pos);
-			qoip_encode_inner(q, op, op_cnt);
+			qoip_encode_inner(q, ops, op_cnt);
 		}
 	}
 	else {
@@ -899,15 +816,12 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 			q->px.rgba.r = q->in[px_pos + 0];
 			q->px.rgba.g = q->in[px_pos + 1];
 			q->px.rgba.b = q->in[px_pos + 2];
-			qoip_encode_inner(q, op, op_cnt);
+			qoip_encode_inner(q, ops, op_cnt);
 		}
 	}
 	qoip_encode_run(q);/* Cap off ending run if present*/
-
 	qoip_finish(q);
-
 	*out_len = q->p;
-
 	return 0;
 }
 
@@ -945,19 +859,27 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 			return qoip_fastpath[i].dec(q, data_len);
 	}
 
-	if(qoip_expand_opcodes(op_cnt, ops, &(q->run1_len), &(q->index1_maxval)))
+	if(qoip_expand_opcodes(&op_cnt, ops, q))
 		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 
-	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set_desc);
+	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
 	if(q->channels==4) {
 		for (px_pos = 0; px_pos < q->px_len; px_pos += 4) {
 			if (q->run > 0)
 				--q->run;
 			else if (q->p < data_len) {
-				for(i=0;i<op_cnt;++i) {
-					if ((q->in[q->p] & ops[i].mask) == ops[i].opcode) {
-						ops[i].dec(q);
-						break;
+				if(q->in[q->p]==q->run2_opcode) {
+					++q->p;
+					q->run = q->in[q->p++];
+				}
+				else if(q->in[q->p]>q->run2_opcode)
+					q->run = q->in[q->p++] - q->run1_opcode;
+				else {
+					for(i=0;i<op_cnt;++i) {
+						if ((q->in[q->p] & ops[i].mask) == ops[i].opcode) {
+							ops[i].dec(q);
+							break;
+						}
 					}
 				}
 				q->index[QOIP_COLOR_HASH(q->px) & q->index1_maxval] = q->px;
@@ -970,10 +892,18 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 			if (q->run > 0)
 				--q->run;
 			else if (q->p < data_len) {
-				for(i=0;i<op_cnt;++i) {
-					if ((q->in[q->p] & ops[i].mask) == ops[i].opcode) {
-						ops[i].dec(q);
-						break;
+				if(q->in[q->p]==q->run2_opcode) {
+					++q->p;
+					q->run = q->in[q->p++];
+				}
+				else if(q->in[q->p]>q->run2_opcode)
+					q->run = q->in[q->p++] - q->run1_opcode;
+				else {
+					for(i=0;i<op_cnt;++i) {
+						if ((q->in[q->p] & ops[i].mask) == ops[i].opcode) {
+							ops[i].dec(q);
+							break;
+						}
 					}
 				}
 				q->index[QOIP_COLOR_HASH(q->px) & q->index1_maxval] = q->px;
