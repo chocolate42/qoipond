@@ -627,20 +627,18 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 	q->run2_opcode = op++;
 	q->run1_opcode=op;
 	q->run1_len = 256 - q->run1_opcode;
-	//if(q->run2_len!=-1) {/*run2 present, extend the number of storable values */
-	//	q->run2_len += q->run1_len;
-	//}
+	q->run2_len += q->run1_len;
 	return 0;
 }
 
 static inline void qoip_encode_run(qoip_working_t *q) {
-	for(; q->run>=256; q->run-=256) {
+	for(; q->run>=q->run2_len; q->run-=q->run2_len) {
 		q->out[q->p++] = q->run2_opcode;
 		q->out[q->p++] = 255;
 	}
 	if(q->run>q->run1_len) {
 		q->out[q->p++] = q->run2_opcode;
-		q->out[q->p++] = q->run - 1;
+		q->out[q->p++] = (q->run - 1) - q->run1_len;
 		q->run = 0;
 	}
 	else if(q->run) {
@@ -796,7 +794,7 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 	else if (q->p < data_len) {
 		if(q->in[q->p]==q->run2_opcode) {
 			++q->p;
-			q->run = q->in[q->p++];
+			q->run = q->in[q->p++] + q->run1_len;
 		}
 		else if(q->in[q->p]>q->run2_opcode)
 			q->run = q->in[q->p++] - q->run1_opcode;
