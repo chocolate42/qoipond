@@ -244,23 +244,8 @@ static int qoip_enc_index(qoip_working_t *q, u8 opcode) {
 	q->index[index_pos] = q->px;
 	return 0;
 }
-static void qoip_dec_index7(qoip_working_t *q) {
-	q->px = q->index[q->in[q->p++] & 0x7f];
-}
-static void qoip_dec_index6(qoip_working_t *q) {
-	q->px = q->index[q->in[q->p++] & 0x3f];
-}
-static void qoip_dec_index5(qoip_working_t *q) {
-	q->px = q->index[q->in[q->p++] & 0x1f];
-}
-static void qoip_dec_index4(qoip_working_t *q) {
-	q->px = q->index[q->in[q->p++] & 0x0f];
-}
-static void qoip_dec_index3(qoip_working_t *q) {
-	q->px = q->index[q->in[q->p++] & 0x07];
-}
-static void qoip_dec_index2(qoip_working_t *q) {
-	q->px = q->index[q->in[q->p++] & 0x03];
+static void qoip_dec_index(qoip_working_t *q) {
+	q->px = q->index[q->in[q->p++] & q->index1_maxval];
 }
 
 static int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
@@ -433,12 +418,12 @@ static const opdef_t qoip_ops[] = {
 	{OP_RGBA,   MASK_8, QOIP_SET_LEN5, "OP_RGBA: 5 byte, store RGBA verbatim", qoip_enc_rgba, qoip_dec_rgba, 1},
 	{OP_A,      MASK_8, QOIP_SET_LEN2, "OP_A:    2 byte, store    A verbatim", qoip_enc_a, qoip_dec_a, 1},
 	{OP_INDEX8, MASK_8, QOIP_SET_INDEX2, "OP_INDEX8: 2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8, 1},
-	{OP_INDEX7, MASK_1, QOIP_SET_INDEX1, "OP_INDEX7: 1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index7, 128},
-	{OP_INDEX6, MASK_2, QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index6,  64},
-	{OP_INDEX5, MASK_3, QOIP_SET_INDEX1, "OP_INDEX5: 1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index5,  32},
-	{OP_INDEX4, MASK_4, QOIP_SET_INDEX1, "OP_INDEX4: 1 byte,  16 value index cache", qoip_enc_index, qoip_dec_index4,  16},
-	{OP_INDEX3, MASK_5, QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index3,   8},
-	{OP_INDEX2, MASK_6, QOIP_SET_INDEX1, "OP_INDEX2: 1 byte,   4 value index cache", qoip_enc_index, qoip_dec_index2,   4},
+	{OP_INDEX7, MASK_1, QOIP_SET_INDEX1, "OP_INDEX7: 1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index, 128},
+	{OP_INDEX6, MASK_2, QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index,  64},
+	{OP_INDEX5, MASK_3, QOIP_SET_INDEX1, "OP_INDEX5: 1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index,  32},
+	{OP_INDEX4, MASK_4, QOIP_SET_INDEX1, "OP_INDEX4: 1 byte,  16 value index cache", qoip_enc_index, qoip_dec_index,  16},
+	{OP_INDEX3, MASK_5, QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index,   8},
+	{OP_INDEX2, MASK_6, QOIP_SET_INDEX1, "OP_INDEX2: 1 byte,   4 value index cache", qoip_enc_index, qoip_dec_index,   4},
 
 	{OP_DIFF,       MASK_2, QOIP_SET_LEN1, "OP_DIFF:       1 byte delta,   vr  -2..1,  vg  -2..1,    vb  -2..1", qoip_enc_diff, qoip_dec_diff, 64},
 	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, vg_r  -2..1,  vg  -4..3,  vg_b  -2..1", qoip_enc_luma1_232, qoip_dec_luma1_232, 128},
