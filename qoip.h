@@ -137,8 +137,8 @@ enum{
 	OP_RUN1_7, OP_RUN1_6, OP_RUN1_5, OP_RUN1_4, OP_RUN1_3, OP_RUN1_2, OP_RUN1_1, OP_RUN1_0,
 	OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
 	OP_DIFF, OP_LUMA2_464, OP_RGB3, OP_LUMA1_232, OP_LUMA3_676, OP_LUMA3_4645,
+	OP_INDEX8,
 	/* new_op id goes here */
-	/* 	OP_INDEXF7, OP_INDEXF6, OP_INDEXF5, OP_INDEXF4, OP_INDEXF3, OP_INDEXF2, // FIFO TODO*/
 	OP_END
 };
 
@@ -154,7 +154,7 @@ enum{
 
 /* Defines which set an op belongs to. The order of this enum determines
 the order ops are sorted for encode/decode. Modify with caution. */
-enum{QOIP_SET_RUN1, QOIP_SET_RUN2, QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4, QOIP_SET_LEN5};
+enum{QOIP_SET_RUN1, QOIP_SET_RUN2, QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4, QOIP_SET_LEN5};
 
 /* Decode masks */
 enum{MASK_1=0x80, MASK_2=0xc0, MASK_3=0xe0, MASK_4=0xf0, MASK_5=0xf8, MASK_6=0xfc, MASK_7=0xfe, MASK_8=0xff};
@@ -170,7 +170,7 @@ typedef struct {
 	int channels, run, run1_len, index1_maxval;
 	unsigned char *out;
 	const unsigned char *in;
-	qoip_rgba_t index[128], px, px_prev;
+	qoip_rgba_t index[128], index2[256], px, px_prev;
 	i8 vr, vg, vb, va, vg_r, vg_b;
 	u8 run1_opcode, run2_opcode;
 } qoip_working_t;
@@ -238,8 +238,7 @@ static void qoip_dec_diff(qoip_working_t *q) {
 
 /* This function encodes all index1_* ops */
 static int qoip_enc_index(qoip_working_t *q, u8 opcode) {
-	int index_pos;
-	index_pos = QOIP_COLOR_HASH(q->px) & q->index1_maxval;
+	int index_pos = QOIP_COLOR_HASH(q->px) & q->index1_maxval;
 	if (q->index[index_pos].v == q->px.v) {
 		q->out[q->p++] = opcode | index_pos;
 		return 1;
@@ -264,6 +263,21 @@ static void qoip_dec_index3(qoip_working_t *q) {
 }
 static void qoip_dec_index2(qoip_working_t *q) {
 	q->px = q->index[q->in[q->p++] & 0x03];
+}
+
+static int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
+	int index_pos = QOIP_COLOR_HASH(q->px) & 0xff;
+	if (q->index2[index_pos].v == q->px.v) {
+		q->out[q->p++] = opcode;
+		q->out[q->p++] = index_pos;
+		return 1;
+	}
+	q->index2[index_pos] = q->px;
+	return 0;
+}
+static void qoip_dec_index8(qoip_working_t *q) {
+	++q->p;
+	q->px = q->index2[q->in[q->p++]];
 }
 
 static int qoip_enc_luma1_232(qoip_working_t *q, u8 opcode) {
@@ -475,17 +489,8 @@ static const opdef_t qoip_ops[] = {
 	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, vg_r  -2..1,  vg  -4..3,  vg_b  -2..1", qoip_enc_luma1_232, qoip_dec_luma1_232, 128},
 	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, vg_r -32..31, vg -64..63, vg_b -32..31", qoip_enc_luma3_676, qoip_dec_luma3_676, 8},
 	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7  va -16..15", qoip_enc_luma3_4645, qoip_dec_luma3_4645, 8},
-
+	{OP_INDEX8,   MASK_8, QOIP_SET_INDEX2, "OP_INDEX8:    2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8, 1},
 	/* new_op definition goes here*/
-
-	/* FIFO TODO
-	{OP_INDEXF7, MASK_1, QOIP_SET_INDEX1, "OP_INDEXF7", "1 byte. 128 value FIFO index cache", NULL, NULL, 128},
-	{OP_INDEXF6, MASK_2, QOIP_SET_INDEX1, "OP_INDEXF6", "1 byte.  64 value FIFO index cache", NULL, NULL,  64},
-	{OP_INDEXF5, MASK_3, QOIP_SET_INDEX1, "OP_INDEXF5", "1 byte.  32 value FIFO index cache", NULL, NULL,  32},
-	{OP_INDEXF4, MASK_4, QOIP_SET_INDEX1, "OP_INDEXF4", "1 byte.  16 value FIFO index cache", NULL, NULL,  16},
-	{OP_INDEXF3, MASK_5, QOIP_SET_INDEX1, "OP_INDEXF3", "1 byte.   8 value FIFO index cache", NULL, NULL,   8},
-	{OP_INDEXF2, MASK_6, QOIP_SET_INDEX1, "OP_INDEXF2", "1 byte.   4 value FIFO index cache", NULL, NULL,   4},
-	*/
 	{OP_END}
 };
 
