@@ -76,6 +76,7 @@ Implementing new ops tl;dr:
 
 #include <inttypes.h>
 #include <stddef.h>
+#include <stdio.h>
 typedef   int8_t  i8;
 typedef  uint8_t  u8;
 typedef uint32_t u32;
@@ -96,6 +97,18 @@ The colorspace is purely informative. It will be saved to the file header, but
 does not affect en-/decoding in any way. */
 
 enum{QOIP_SRGB, QOIP_LINEAR};
+/* Opcode id's. Never change order, remove an op, or add a new op anywhere other
+than at the end. Doing this allows for basic backwards compatibility. The order
+of this enum must match the order of qoip_ops[] as these values are an index
+into it. Less kludgey implementation TODO */
+enum{
+	OP_A,
+	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
+	OP_DIFF, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_RGB3,
+	OP_DELTA,
+	/* new_op id goes here */
+	OP_END
+};
 
 typedef struct {
 	u32 width;
@@ -105,15 +118,10 @@ typedef struct {
 	u64 encoded_size;
 } qoip_desc;
 
-/* Populate desc by reading a QOIP header. If loc is NULL, read from
-bytes + 0, otherwise read from bytes + *loc. Advance loc if present. */
-int qoip_read_header(const unsigned char *bytes, size_t *loc, qoip_desc *desc);
-
-/* Return the maximum size of a QOIP encoded image with dimensions in desc */
-size_t qoip_maxsize(const qoip_desc *desc);
-
-/* Return the maximum size of a decoded image with dimensions in desc */
-size_t qoip_maxsize_raw(const qoip_desc *desc, int channels);
+/* Decode a QOIP image from memory. The function either returns 1 on failure
+(invalid parameters) or 0 on sucess. On success, the qoip_desc struct is filled
+with the description from the file header. */
+int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out);
 
 /* Encode raw RGB or RGBA pixels into a QOIP image in memory. The function either
 returns 1 on failure (invalid parameters) or 0 on success. On success out is the
@@ -123,23 +131,18 @@ defining the opcode combination to use. It is up to the caller to ensure this
 string is valid, NULL is allowed which means the encoder uses the default combination. */
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string);
 
-/* Decode a QOIP image from memory. The function either returns 1 on failure
-(invalid parameters) or 0 on sucess. On success, the qoip_desc struct is filled
-with the description from the file header. */
-int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out);
+/* Return the maximum size of a QOIP encoded image with dimensions in desc */
+size_t qoip_maxsize(const qoip_desc *desc);
 
-/* Opcode id enum. Never change order, remove an op, or add a new op anywhere other
-than at the end. Doing this allows for basic backwards compatibility.
-The order of this enum must match the order of qoip_ops[] as these values are an
-index into it. Less kludgey implementation TODO */
-enum{
-	OP_A,
-	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
-	OP_DIFF, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_RGB3,
-	OP_DELTA,
-	/* new_op id goes here */
-	OP_END
-};
+/* Return the maximum size of a decoded image with dimensions in desc */
+size_t qoip_maxsize_raw(const qoip_desc *desc, int channels);
+
+/* Populate desc by reading a QOIP header. If loc is NULL, read from
+bytes + 0, otherwise read from bytes + *loc. Advance loc if present. */
+int qoip_read_header(const unsigned char *bytes, size_t *loc, qoip_desc *desc);
+
+/* Print opcode layout from a QOIP header */
+int qoip_stat(const void *encoded, FILE *io);
 
 #ifdef __cplusplus
 }
@@ -201,7 +204,6 @@ next pixel.
 The decode functions are called when qoip_decode has determined the op was used, no
 detection necessary.
 */
-
 static int qoip_enc_a(qoip_working_t *q, u8 opcode) {
 	if ( q->vr == 0 && q->vg == 0 && q->vb == 0 ) {
 		q->out[q->p++] = opcode;
@@ -688,8 +690,8 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 	q->rgba_opcode = op++;
 	q->run2_len=256;
 	q->run2_opcode = op++;
-	q->run1_opcode=op;
-	q->run1_len = 256 - q->run1_opcode;
+	q->run1_opcode = op & 0xff;
+	q->run1_len = (256 - q->run1_opcode) & 0xff;
 	q->run2_len += q->run1_len;
 	return 0;
 }
@@ -885,6 +887,49 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 		q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px;
 		q->index2[QOIP_COLOR_HASH(q->px) & 255] = q->px;
 	}
+}
+
+/* Investigate ANS-coding binary opstring in header TODO
+This could allow for a fixed size bitstream header by storing the opstring
+as u64 and allow for easier analysis by returning the value here */
+int qoip_stat(const void *encoded, FILE *io) {
+	int op_cnt;
+	qoip_desc desc;
+	qoip_opcode_t ops[OP_END];
+	qoip_working_t qq = {0};
+	qoip_working_t *q = &qq;
+	size_t i, p = 0;
+	const unsigned char *bytes = (const unsigned char *) encoded;
+
+	if(qoip_read_file_header(bytes, &p, &desc))
+		return qoip_ret(1, stderr, "qoip_stat: Failed to read file header");
+	if(qoip_read_bitstream_header(bytes, &p, &desc, ops, &op_cnt))
+		return qoip_ret(1, stderr, "qoip_stat: Failed to read bitstream header");
+	if(qoip_expand_opcodes(&op_cnt, ops, q))
+		return qoip_ret(1, stderr, "qoip_stat: Failed to expand opstring");
+
+	if(desc.encoded_size)
+		fprintf(io, "Bitstream size: %"PRIu64"\n", desc.encoded_size);
+	else
+		fprintf(io, "Bitstream size unknown (streamed)\n");
+
+	fprintf(io, "Width: %6"PRIu32"\n", desc.width);
+	fprintf(io, "Height:%6"PRIu32"\n", desc.height);
+	fprintf(io, "Channels: %"PRIu8"\n", desc.channels);
+	fprintf(io, "Colorspace: %s\n", desc.colorspace==QOIP_SRGB ? "sRGB" : "Linear");
+
+	for(i=0; i<op_cnt; ++i) {
+		fprintf(io, "Opcode 0x%02x: %s\n", ops[i].opcode, qoip_ops[ops[i].id].desc);
+	}
+	fprintf(io, "Opcode 0x%02x: OP_RGB\n", q->rgb_opcode);
+	fprintf(io, "Opcode 0x%02x: OP_RGBA\n", q->rgba_opcode);
+	fprintf(io, "Opcode 0x%02x: OP_RUN2\n", q->run2_opcode);
+	if(q->run1_opcode) {
+		fprintf(io, "Opcode 0x%02x: OP_RUN1\n", q->run2_opcode);
+		fprintf(io, "RUN1 range: 1..%d\n", q->run1_len);
+	}
+	fprintf(io, "RUN2 range: %d..%d\n", q->run1_len+1, q->run2_len);
+	return 0;
 }
 
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out) {
