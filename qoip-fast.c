@@ -139,64 +139,67 @@ int qoip_encode_default(qoip_working_t *q, size_t *out_len) {
 	return 0;
 }
 
+static inline void qoip_decode_default_inner(qoip_working_t *q) {
+	if      ((q->in[q->p] & MASK_2) == DEFAULT_OP_DIFF) {
+		q->px.rgba.r += ((q->in[q->p] >> 4) & 0x03) - 2;
+		q->px.rgba.g += ((q->in[q->p] >> 2) & 0x03) - 2;
+		q->px.rgba.b += ( q->in[q->p]       & 0x03) - 2;
+		++q->p;
+	}
+	else if ((q->in[q->p] & MASK_2) == DEFAULT_OP_LUMA) {
+		int b1 = q->in[q->p++];
+		int b2 = q->in[q->p++];
+		int vg = (b1 & 0x3f) - 32;
+		q->px.rgba.r += vg - 8 + ((b2 >> 4) & 0x0f);
+		q->px.rgba.g += vg;
+		q->px.rgba.b += vg - 8 +  (b2       & 0x0f);
+	}
+	else if ((q->in[q->p] & MASK_2) == DEFAULT_OP_RGB3) {
+		int b1 = q->in[q->p++];
+		int b2 = q->in[q->p++];
+		int b3 = q->in[q->p++];
+		q->px.rgba.r += (((b1 & 0x3f) << 1) | ((b3) >> 7)) - 64;
+		q->px.rgba.g  = b2;
+		q->px.rgba.b += (b3 & 0x7f) - 64;
+	}
+	else if ((q->in[q->p] & MASK_3) == DEFAULT_OP_INDEX5) {
+		q->px = q->index[q->in[q->p++] & 0x1f];
+	}
+	else if (q->in[q->p] == DEFAULT_OP_RUN2) {
+		++q->p;
+		q->run = q->in[q->p++] + q->run1_len;
+	}
+	else if (q->in[q->p] == DEFAULT_OP_RGB) {
+		++q->p;
+		q->px.rgba.r = q->in[q->p++];
+		q->px.rgba.g = q->in[q->p++];
+		q->px.rgba.b = q->in[q->p++];
+	}
+	else if (q->in[q->p] == DEFAULT_OP_RGBA) {
+		++q->p;
+		q->px.rgba.r = q->in[q->p++];
+		q->px.rgba.g = q->in[q->p++];
+		q->px.rgba.b = q->in[q->p++];
+		q->px.rgba.a = q->in[q->p++];
+	}
+	else if (q->in[q->p] == DEFAULT_OP_A) {
+		++q->p;
+		q->px.rgba.a = q->in[q->p++];
+	}
+	else{
+		q->run = q->in[q->p++] - q->run1_opcode;
+	}
+	q->index[QOIP_COLOR_HASH(q->px) & 31] = q->px;
+}
+
 int qoip_decode_default(qoip_working_t *q, size_t data_len) {
 	size_t px_pos;
 	if(q->channels==4) {
 		for (px_pos = 0; px_pos < q->px_len; px_pos += 4) {
 			if (q->run > 0)
 				--q->run;
-			else if (q->p < data_len) {
-				if      ((q->in[q->p] & MASK_2) == DEFAULT_OP_DIFF) {
-					q->px.rgba.r += ((q->in[q->p] >> 4) & 0x03) - 2;
-					q->px.rgba.g += ((q->in[q->p] >> 2) & 0x03) - 2;
-					q->px.rgba.b += ( q->in[q->p]       & 0x03) - 2;
-					++q->p;
-				}
-				else if ((q->in[q->p] & MASK_2) == DEFAULT_OP_LUMA) {
-					int b1 = q->in[q->p++];
-					int b2 = q->in[q->p++];
-					int vg = (b1 & 0x3f) - 32;
-					q->px.rgba.r += vg - 8 + ((b2 >> 4) & 0x0f);
-					q->px.rgba.g += vg;
-					q->px.rgba.b += vg - 8 +  (b2       & 0x0f);
-				}
-				else if ((q->in[q->p] & MASK_2) == DEFAULT_OP_RGB3) {
-					int b1 = q->in[q->p++];
-					int b2 = q->in[q->p++];
-					int b3 = q->in[q->p++];
-					q->px.rgba.r += (((b1 & 0x3f) << 1) | ((b3) >> 7)) - 64;
-					q->px.rgba.g  = b2;
-					q->px.rgba.b += (b3 & 0x7f) - 64;
-				}
-				else if ((q->in[q->p] & MASK_3) == DEFAULT_OP_INDEX5) {
-					q->px = q->index[q->in[q->p++] & 0x1f];
-				}
-				else if (q->in[q->p] == DEFAULT_OP_RUN2) {
-					++q->p;
-					q->run = q->in[q->p++];
-				}
-				else if (q->in[q->p] == DEFAULT_OP_RGB) {
-					++q->p;
-					q->px.rgba.r = q->in[q->p++];
-					q->px.rgba.g = q->in[q->p++];
-					q->px.rgba.b = q->in[q->p++];
-				}
-				else if (q->in[q->p] == DEFAULT_OP_RGBA) {
-					++q->p;
-					q->px.rgba.r = q->in[q->p++];
-					q->px.rgba.g = q->in[q->p++];
-					q->px.rgba.b = q->in[q->p++];
-					q->px.rgba.a = q->in[q->p++];
-				}
-				else if (q->in[q->p] == DEFAULT_OP_A) {
-					++q->p;
-					q->px.rgba.a = q->in[q->p++];
-				}
-				else/* if ((q->in[q->p] & MASK_3) == DEFAULT_OP_RUN1) */{
-					q->run = (q->in[q->p++] & 0x1f);
-				}
-				q->index[QOIP_COLOR_HASH(q->px) & 31] = q->px;
-			}
+			else if (q->p < data_len)
+				qoip_decode_default_inner(q);
 			*(qoip_rgba_t*)(q->out + px_pos) = q->px;
 		}
 	}
@@ -204,58 +207,8 @@ int qoip_decode_default(qoip_working_t *q, size_t data_len) {
 		for (px_pos = 0; px_pos < q->px_len; px_pos += 3) {
 			if (q->run > 0)
 				--q->run;
-			else if (q->p < data_len) {
-				if      ((q->in[q->p] & MASK_2) == DEFAULT_OP_DIFF) {
-					q->px.rgba.r += ((q->in[q->p] >> 4) & 0x03) - 2;
-					q->px.rgba.g += ((q->in[q->p] >> 2) & 0x03) - 2;
-					q->px.rgba.b += ( q->in[q->p]       & 0x03) - 2;
-					++q->p;
-				}
-				else if ((q->in[q->p] & MASK_2) == DEFAULT_OP_LUMA) {
-					int b1 = q->in[q->p++];
-					int b2 = q->in[q->p++];
-					int vg = (b1 & 0x3f) - 32;
-					q->px.rgba.r += vg - 8 + ((b2 >> 4) & 0x0f);
-					q->px.rgba.g += vg;
-					q->px.rgba.b += vg - 8 +  (b2       & 0x0f);
-				}
-				else if ((q->in[q->p] & MASK_2) == DEFAULT_OP_RGB3) {
-					int b1 = q->in[q->p++];
-					int b2 = q->in[q->p++];
-					int b3 = q->in[q->p++];
-					q->px.rgba.r += (((b1 & 0x3f) << 1) | ((b3) >> 7)) - 64;
-					q->px.rgba.g  = b2;
-					q->px.rgba.b += (b3 & 0x7f) - 64;
-				}
-				else if ((q->in[q->p] & MASK_3) == DEFAULT_OP_INDEX5) {
-					q->px = q->index[q->in[q->p++] & 0x1f];
-				}
-				else if (q->in[q->p] == DEFAULT_OP_RUN2) {
-					++q->p;
-					q->run = q->in[q->p++];
-				}
-				else if (q->in[q->p] == DEFAULT_OP_RGB) {
-					++q->p;
-					q->px.rgba.r = q->in[q->p++];
-					q->px.rgba.g = q->in[q->p++];
-					q->px.rgba.b = q->in[q->p++];
-				}
-				/*OP_RGBA and OP_A need to exist in this path but A can be discarded*/
-				else if (q->in[q->p] == DEFAULT_OP_RGBA) {
-					++q->p;
-					q->px.rgba.r = q->in[q->p++];
-					q->px.rgba.g = q->in[q->p++];
-					q->px.rgba.b = q->in[q->p++];
-					++q->p;
-				}
-				else if (q->in[q->p] == DEFAULT_OP_A) {
-					q->p+=2;
-				}
-				else/* if ((q->in[q->p] & MASK_3) == DEFAULT_OP_RUN1) */{
-					q->run = (q->in[q->p++] & 0x1f);
-				}
-				q->index[QOIP_COLOR_HASH(q->px) & 31] = q->px;
-			}
+			else if (q->p < data_len)
+				qoip_decode_default_inner(q);
 			q->out[px_pos + 0] = q->px.rgba.r;
 			q->out[px_pos + 1] = q->px.rgba.g;
 			q->out[px_pos + 2] = q->px.rgba.b;

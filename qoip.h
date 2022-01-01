@@ -780,9 +780,9 @@ typedef struct {
 	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
-int qoip_fastpath_cnt = 1;/*disable for run1 rework until implemented TODO*/
+int qoip_fastpath_cnt = 1;
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{"0004080a0d", qoip_encode_default, NULL},
+	{"0004080a0d", qoip_encode_default, qoip_decode_default},
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
@@ -955,20 +955,19 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		return qoip_ret(1, stderr, "qoip_decode: Failed to read file header");
 	if(qoip_read_bitstream_header(q->in, &(q->p), desc, ops, &op_cnt))
 		return qoip_ret(1, stderr, "qoip_decode: Failed to read bitstream header");
+	for(i=0;i<op_cnt;++i)
+		sprintf(opstr+(2*i), "%02x", ops[i].id);
+	if(qoip_expand_opcodes(&op_cnt, ops, q))
+		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 	q->px_len = desc->width * desc->height * q->channels;
 	q->px.v = 0;
 	q->px.rgba.a = 255;
 
 	/* Check for fastpath implementation */
-	for(i=0;i<op_cnt;++i)
-		sprintf(opstr+(2*i), "%02x", ops[i].id);
 	for(i=0;i<qoip_fastpath_cnt;++i) {
 		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
 			return qoip_fastpath[i].dec(q, data_len);
 	}
-
-	if(qoip_expand_opcodes(&op_cnt, ops, q))
-		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
 	if(q->channels==4) {
