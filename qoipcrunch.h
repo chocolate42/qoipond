@@ -78,7 +78,7 @@ static int qoipcrunch_iterate(int level, qoip_set_t *set, int set_cnt, int *inde
 int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp) {
 	char currbest_str[256], opstring[256], opstring2[256], *next_opstring;
 	int i[8]={0}, j, opcnt, opstring_loc, opstring2_loc;
-	size_t currbest_len;
+	size_t currbest_len, w_len;
 	size_t cnt = 0;
 	int level = -1;
 	int standalone_use;
@@ -87,6 +87,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	int set_cnt = isrgb ? 4 : 5;/* avoid alpha ops */
 	int standalone_cnt = isrgb ? 1 : 2;/* avoid alpha ops */
 	void *working = tmp?tmp:out;
+	size_t *working_len = tmp?&w_len:out_len;
 
 	/* Sets of ops where one op must be chosen from each set
 	OP_END indicates that "no op" is a valid choice from a set
@@ -110,7 +111,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
-		"000104090a0b0c",/*deltax*/
+		"0104090a0b0c",/*deltax*/
 		"0004080a0d",/*propc*/
 		"0001020a0e",/*index7 + delta*/
 		/* demo28 TODO */
@@ -134,34 +135,38 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		next_opstring = effort-1;
 		do {
 			++next_opstring;
-			if(qoip_encode(data, desc, working, out_len, next_opstring))
+			if(qoip_encode(data, desc, working, working_len, next_opstring))
 				return 1;
-			if(tmp && currbest_len>*out_len)/*scratch space used, copy best to out*/
-				memcpy(out, tmp, *out_len);
-			qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, next_opstring);
+			if(tmp && currbest_len>*working_len) {/*scratch space used, copy best to out*/
+				memcpy(out, tmp, *working_len);
+				*out_len = *working_len;
+			}
+			qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, next_opstring);
 		} while( (next_opstring=strchr(next_opstring, ',')) );
 		++cnt;
 		if(count)
 			*count=cnt;
-		if(!tmp && *out_len!=currbest_len)/*scratch space not used, redo best combo*/
-			qoip_encode(data, desc, out, out_len, currbest_str);
+		if(!tmp && *working_len!=currbest_len)/*scratch space not used, redo best combo*/
+			qoip_encode(data, desc, out, working_len, currbest_str);
 		return 0;
 	}
 
 	/* Do common opstrings */
 	for(j=0;j<common_cnt;++j) {
-		if(qoip_encode(data, desc, working, out_len, common[j]))
+		if(qoip_encode(data, desc, working, working_len, common[j]))
 			return 1;
-		if(tmp && currbest_len>*out_len)
-				memcpy(out, tmp, *out_len);
-		qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, common[j]);
+		if(tmp && currbest_len>*working_len) {
+			memcpy(out, tmp, *working_len);
+			*out_len = *working_len;
+		}
+		qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, common[j]);
 		++cnt;
 	}
 	if(level==0) {
 		if(count)
 			*count=cnt;
-		if(!tmp && *out_len!=currbest_len)
-			qoip_encode(data, desc, working, out_len, currbest_str);
+		if(!tmp && *working_len!=currbest_len)
+			qoip_encode(data, desc, working, working_len, currbest_str);
 		return 0;
 	}
 
@@ -186,22 +191,24 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 					}
 				}
 				if((standalone_use+opcnt)<256) {
-					if(qoip_encode(data, desc, working, out_len, opstring2))
+					if(qoip_encode(data, desc, working, working_len, opstring2))
 						return 1;
-					if(tmp && currbest_len>*out_len)
-						memcpy(out, tmp, *out_len);
+					if(tmp && currbest_len>*working_len) {
+						memcpy(out, tmp, *working_len);
+						*out_len = *working_len;
+					}
 					++cnt;
 				}
 			}
-			qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, opstring2);
+			qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, opstring2);
 		}
 	} while(!qoipcrunch_iterate(level-1, set, set_cnt, i));
 
 	if(count)
 		*count=cnt;
 
-	if(!tmp && *out_len!=currbest_len)
-		qoip_encode(data, desc, out, out_len, currbest_str);
+	if(!tmp && *working_len!=currbest_len)
+		qoip_encode(data, desc, out, working_len, currbest_str);
 	return 0;
 }
 

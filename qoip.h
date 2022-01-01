@@ -780,9 +780,10 @@ typedef struct {
 	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
-int qoip_fastpath_cnt = 1;
+int qoip_fastpath_cnt = 2;
 static const qoip_fastpath_t qoip_fastpath[] = {
 	{"0004080a0d", qoip_encode_propc, qoip_decode_propc},
+	{"0104090a0b0c", qoip_encode_deltax, qoip_decode_deltax},
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
@@ -802,7 +803,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	)
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 	if(opstring == NULL || *opstring==0)
-		opstring = "000104090a0b0c";/* Default */
+		opstring = "0104090a0b0c";/* Default */
 	opstr_len = strchr(opstring, ',') ? strchr(opstring, ',')-opstring : strlen(opstring);
 	if(opstr_len%2)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
