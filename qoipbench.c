@@ -310,8 +310,7 @@ int opt_nodecode = 0;
 int opt_noencode = 0;
 int opt_norecurse = 0;
 int opt_onlytotals = 0;
-int effort;
-
+char *effort;
 
 typedef struct {
 	uint64_t size;
@@ -345,10 +344,10 @@ void benchmark_print_result(benchmark_result_t res) {
 	res.qoip.size /= res.count;
 
 	double px = res.px;
-	printf("         decode_ms     encode_ms   decode_mpps   encode_mpps   size_kb    rate\n");
+	printf("decode_ms  encode_ms  decode_mpps  encode_mpps  size_kb  rate\n");
 	if (!opt_nopng) {
 		printf(
-			"libpng:   %8.3f      %8.3f      %8.2f      %8.2f  %8"PRIu64"   %4.1f%%\n",
+			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: libpng\n",
 			(double)res.libpng.decode_time/1000000.0,
 			(double)res.libpng.encode_time/1000000.0,
 			(res.libpng.decode_time > 0 ? px / ((double)res.libpng.decode_time/1000.0) : 0),
@@ -357,7 +356,7 @@ void benchmark_print_result(benchmark_result_t res) {
 			((double)res.libpng.size/(double)res.raw_size) * 100.0
 		);
 		printf(
-			"stbi:     %8.3f      %8.3f      %8.2f      %8.2f  %8"PRIu64"   %4.1f%%\n",
+			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: stbi\n",
 			(double)res.stbi.decode_time/1000000.0,
 			(double)res.stbi.encode_time/1000000.0,
 			(res.stbi.decode_time > 0 ? px / ((double)res.stbi.decode_time/1000.0) : 0),
@@ -367,14 +366,14 @@ void benchmark_print_result(benchmark_result_t res) {
 		);
 	}
 	printf(
-		"qoip(%2d): %8.3f      %8.3f      %8.2f      %8.2f  %8"PRIu64"   %4.1f%%\n",
-		effort,
+			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: qoip(%s)\n",
 		(double)res.qoip.decode_time/1000000.0,
 		(double)res.qoip.encode_time/1000000.0,
 		(res.qoip.decode_time > 0 ? px / ((double)res.qoip.decode_time/1000.0) : 0),
 		(res.qoip.encode_time > 0 ? px / ((double)res.qoip.encode_time/1000.0) : 0),
 		res.qoip.size/1024,
-		((double)res.qoip.size/(double)res.raw_size) * 100.0
+		((double)res.qoip.size/(double)res.raw_size) * 100.0,
+		effort
 	);
 	printf("\n");
 }
@@ -636,7 +635,7 @@ int main(int argc, char **argv) {
 	}
 
 	opt_runs = atoi(argv[1]);
-	effort = atoi(argv[2]);
+	effort = argv[2];
 	if (opt_runs <= 0) {
 		ERROR("Invalid number of runs %d", opt_runs);
 	}

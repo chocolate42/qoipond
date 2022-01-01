@@ -11,7 +11,7 @@ typedef struct opt{
 	size_t in_len;
 	FILE *out;
 	char *in;
-	int level;
+	char *effort;
 	int _mode;
 } opt_t;
 
@@ -63,7 +63,7 @@ static inline int opt_fread_fully(char **dest, size_t *dest_len, char *path){
 
 int opt_init(opt_t *opt){
 	opt->_mode=2;
-	opt->level=1;
+	opt->effort=NULL;
 	opt->in=NULL;
 	opt->in_len=0;
 	opt->out=NULL;
@@ -88,17 +88,9 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			++loc;
 		}
-		else if(strcmp("-level", argv[loc])==0){
-			opt->level=atoi(argv[loc+1]);
-			if(opt->level<-1){
-				fprintf(stderr, "Error, -level value must be at least -1\n");
-				return 1;
-			}
-			else if(opt->level>3){
-				fprintf(stderr, "Error, -level value must be at most 3\n");
-				return 1;
-			}
-			++loc;
+		else if(strcmp("-effort", argv[loc])==0){
+				opt->effort=argv[loc+1];
+				++loc;
 		}
 		else if(strcmp("-list", argv[loc])==0){
 			if(modeset){
@@ -166,8 +158,8 @@ int optmode_help(){
 	printf("    Input path\n");
 
 	printf("\nOPTIONS:\n");
-	printf(" -level input\n");
-	printf("    Set intensity of combination search (-1..3, where -1 just tries the default combination, 0 tries common combinations, and 1-3 try increasingly exhaustive combinations)\n\n");
+	printf(" -effort input\n");
+	printf("    Define a custom set of combinations (comma-delimited), or use an effort level (0..3, where 0 tries some common combinations, 1..3 try increasingly-exhaustive brute-force combinations\n\n");
 
 	return 0;
 }

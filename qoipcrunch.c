@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
 	tmp = malloc(qoip_maxsize(&desc));
 	assert(tmp);
 
-	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.level, &cnt))
+	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.effort, &cnt))
 		return 1;
 
 	if(opt.out) {

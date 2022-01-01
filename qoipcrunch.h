@@ -31,7 +31,7 @@ SOFTWARE.
 extern "C" {
 #endif
 
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level, size_t *count);
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count);
 
 #ifdef __cplusplus
 }
@@ -49,10 +49,14 @@ typedef struct {
 } qoip_set_t;
 
 static void qoipcrunch_update_stats(size_t *currbest_len, char *currbest_str, size_t *candidate_len, char *candidate_str) {
+	size_t len;
 	if(*candidate_len<*currbest_len) {
 		//printf("New best length  %8"PRIu64" with opstring %s\n", *candidate_len, candidate_str?candidate_str:"[default]");
-		if(candidate_str)
-			strcpy(currbest_str, candidate_str);
+		if(candidate_str) {
+			len = strchr(candidate_str, ',') ? strchr(candidate_str, ',')-candidate_str : strlen(candidate_str);
+			memcpy(currbest_str, candidate_str, len);
+			currbest_str[len] = 0;
+		}
 		else
 			currbest_str="";
 		*currbest_len=*candidate_len;
@@ -71,11 +75,12 @@ static int qoipcrunch_iterate(int level, qoip_set_t *set, int set_cnt, int *inde
 	return curr==-1?1:0;
 }
 
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level, size_t *count) {
-	char currbest_str[256], opstring[256], opstring2[256];
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count) {
+	char currbest_str[256], opstring[256], opstring2[256], *next_opstring;
 	int i[8]={0}, j, opcnt, opstring_loc, opstring2_loc;
 	size_t currbest_len;
 	size_t cnt = 0;
+	int level = -1;
 	int standalone_use;
 	int standalone_mask;
 	int isrgb = desc->channels==3 ? 1 : 0;
@@ -114,16 +119,34 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	currbest_len = qoip_maxsize(desc);
 
-	if(level==-1) {/* Do default opstring only */
-		if(qoip_encode(data, desc, out, out_len, NULL))
-			return 1;
+	if(!effort)
+		effort="";
+	if(strcmp(effort, "0")==0)
+		level=0;
+	else if(strcmp(effort, "1")==0)
+		level=1;
+	else if(strcmp(effort, "2")==0)
+		level=2;
+	else if(strcmp(effort, "3")==0)
+		level=3;
+
+	if(level==-1) {/* Try every combination in the user-defined list */
+		next_opstring = effort-1;
+		do {
+			++next_opstring;
+			if(qoip_encode(data, desc, out, out_len, next_opstring))
+				return 1;
+			qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, next_opstring);
+		} while( (next_opstring=strchr(next_opstring, ',')) );
 		++cnt;
 		if(count)
 			*count=cnt;
+		if(*out_len!=currbest_len)
+			qoip_encode(data, desc, out, out_len, currbest_str);
 		return 0;
 	}
 
-	/* Do common opstrings for level>=0 */
+	/* Do common opstrings */
 	for(j=0;j<common_cnt;++j) {
 		if(qoip_encode(data, desc, out, out_len, common[j]))
 			return 1;
