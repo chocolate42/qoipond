@@ -780,9 +780,9 @@ typedef struct {
 	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
-int qoip_fastpath_cnt = 0;/*disable for run1 rework until implemented TODO*/
+int qoip_fastpath_cnt = 1;/*disable for run1 rework until implemented TODO*/
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{"0004080a0d", qoip_encode_default, qoip_decode_default},
+	{"0004080a0d", qoip_encode_default, NULL},
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
@@ -925,7 +925,7 @@ int qoip_stat(const void *encoded, FILE *io) {
 	fprintf(io, "Opcode 0x%02x: OP_RGBA\n", q->rgba_opcode);
 	fprintf(io, "Opcode 0x%02x: OP_RUN2\n", q->run2_opcode);
 	if(q->run1_opcode) {
-		fprintf(io, "Opcode 0x%02x: OP_RUN1\n", q->run2_opcode);
+		fprintf(io, "Opcode 0x%02x: OP_RUN1\n", q->run1_opcode);
 		fprintf(io, "RUN1 range: 1..%d\n", q->run1_len);
 	}
 	fprintf(io, "RUN2 range: %d..%d\n", q->run1_len+1, q->run2_len);

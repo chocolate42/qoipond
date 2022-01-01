@@ -3,14 +3,11 @@
 * Encode functions assume header has been written, but footer needs to be written
 
 */
-enum{DEFAULT_OP_DIFF=0x00, DEFAULT_OP_LUMA=0x40, DEFAULT_OP_RGB3=0x80, DEFAULT_OP_RUN1=0xc0, DEFAULT_OP_RUN2=0xdc, DEFAULT_OP_A=0xdd, DEFAULT_OP_RGBA=0xde, DEFAULT_OP_RGB=0xdf, DEFAULT_OP_INDEX5=0xe0};
+enum{DEFAULT_OP_DIFF=0x00, DEFAULT_OP_LUMA=0x40, DEFAULT_OP_RGB3=0x80, DEFAULT_OP_INDEX5=0xc0, DEFAULT_OP_A=0xe0, DEFAULT_OP_RGB=0xe1, DEFAULT_OP_RGBA=0xe2, DEFAULT_OP_RUN2=0xe3, DEFAULT_OP_RUN1=0xe4};
 
 int qoip_encode_default(qoip_working_t *q, size_t *out_len) {
 	int index_pos;
 	size_t px_pos;
-	q->run1_len = 28;
-	q->run1_opcode=DEFAULT_OP_RUN1;
-	q->run2_opcode=DEFAULT_OP_RUN2;
 	if(q->channels==4) {
 		for (px_pos = 0; px_pos < q->px_len; px_pos += 4) {
 			q->px = *(qoip_rgba_t *)(q->in + px_pos);
