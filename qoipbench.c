@@ -420,6 +420,7 @@ benchmark_result_t benchmark_image(const char *path) {
 	desc_raw.colorspace = QOIP_SRGB;
 	size_t qoip_max_size = qoip_maxsize(&desc_raw);
 	void *encoded_qoip = malloc(qoip_max_size);
+	void *scratch = malloc(qoip_max_size);
 	if (!encoded_qoip) {
 		ERROR("Error, malloc failed %s", path);
 	}
@@ -504,7 +505,7 @@ benchmark_result_t benchmark_image(const char *path) {
 
 		BENCHMARK_FN(opt_nowarmup, opt_runs, res.qoip.encode_time, {
 			size_t enc_size;
-			if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL)) {
+			if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL, scratch)) {
 				ERROR("Error, qoip_encode failed %s", path);
 			}
 			res.qoip.size = enc_size;
@@ -514,6 +515,7 @@ benchmark_result_t benchmark_image(const char *path) {
 	free(pixels);
 	free(encoded_png);
 	free(encoded_qoip);
+	free(scratch);
 
 	return res;
 }

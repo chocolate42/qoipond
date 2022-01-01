@@ -31,7 +31,7 @@ SOFTWARE.
 extern "C" {
 #endif
 
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count);
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp);
 
 #ifdef __cplusplus
 }
@@ -75,7 +75,7 @@ static int qoipcrunch_iterate(int level, qoip_set_t *set, int set_cnt, int *inde
 	return curr==-1?1:0;
 }
 
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count) {
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp) {
 	char currbest_str[256], opstring[256], opstring2[256], *next_opstring;
 	int i[8]={0}, j, opcnt, opstring_loc, opstring2_loc;
 	size_t currbest_len;
@@ -86,6 +86,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	int isrgb = desc->channels==3 ? 1 : 0;
 	int set_cnt = isrgb ? 4 : 5;/* avoid alpha ops */
 	int standalone_cnt = isrgb ? 1 : 2;/* avoid alpha ops */
+	void *working = tmp?tmp:out;
 
 	/* Sets of ops where one op must be chosen from each set
 	OP_END indicates that "no op" is a valid choice from a set
@@ -109,10 +110,9 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
-		"",/*Whatever the default currently is */
-		//"03080a",     /* QOI */
-		"0001020a0e", /* index7 + delta */
-		"0004090a0b0c", /*delta 9h */
+		"000104090a0b0c",/*deltax*/
+		"0004080a0d",/*propc*/
+		"0001020a0e",/*index7 + delta*/
 		/* demo28 TODO */
 	};
 	int common_cnt = 3;
@@ -134,30 +134,34 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		next_opstring = effort-1;
 		do {
 			++next_opstring;
-			if(qoip_encode(data, desc, out, out_len, next_opstring))
+			if(qoip_encode(data, desc, working, out_len, next_opstring))
 				return 1;
+			if(tmp && currbest_len>*out_len)/*scratch space used, copy best to out*/
+				memcpy(out, tmp, *out_len);
 			qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, next_opstring);
 		} while( (next_opstring=strchr(next_opstring, ',')) );
 		++cnt;
 		if(count)
 			*count=cnt;
-		if(*out_len!=currbest_len)
+		if(!tmp && *out_len!=currbest_len)/*scratch space not used, redo best combo*/
 			qoip_encode(data, desc, out, out_len, currbest_str);
 		return 0;
 	}
 
 	/* Do common opstrings */
 	for(j=0;j<common_cnt;++j) {
-		if(qoip_encode(data, desc, out, out_len, common[j]))
+		if(qoip_encode(data, desc, working, out_len, common[j]))
 			return 1;
+		if(tmp && currbest_len>*out_len)
+				memcpy(out, tmp, *out_len);
 		qoipcrunch_update_stats(&currbest_len, currbest_str, out_len, common[j]);
 		++cnt;
 	}
 	if(level==0) {
 		if(count)
 			*count=cnt;
-		if(*out_len!=currbest_len)
-			qoip_encode(data, desc, out, out_len, currbest_str);
+		if(!tmp && *out_len!=currbest_len)
+			qoip_encode(data, desc, working, out_len, currbest_str);
 		return 0;
 	}
 
@@ -182,8 +186,10 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 					}
 				}
 				if((standalone_use+opcnt)<256) {
-					if(qoip_encode(data, desc, out, out_len, opstring2))
+					if(qoip_encode(data, desc, working, out_len, opstring2))
 						return 1;
+					if(tmp && currbest_len>*out_len)
+						memcpy(out, tmp, *out_len);
 					++cnt;
 				}
 			}
@@ -194,7 +200,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	if(count)
 		*count=cnt;
 
-	if(*out_len!=currbest_len)
+	if(!tmp && *out_len!=currbest_len)
 		qoip_encode(data, desc, out, out_len, currbest_str);
 	return 0;
 }

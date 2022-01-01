@@ -44,7 +44,7 @@ int optmode_list(opt_t *opt) {
 int main(int argc, char *argv[]) {
 	opt_t opt;
 	qoip_desc desc;
-	unsigned char *raw, *tmp;
+	unsigned char *raw, *tmp, *scratch;
 	size_t tmp_len, cnt;
 
 	/* Process args */
@@ -68,8 +68,10 @@ int main(int argc, char *argv[]) {
 	qoip_decode(opt.in, opt.in_len, &desc, desc.channels, raw);
 	tmp = malloc(qoip_maxsize(&desc));
 	assert(tmp);
+	scratch = malloc(qoip_maxsize(&desc));
+	assert(scratch);
 
-	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.effort, &cnt))
+	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.effort, &cnt, scratch))
 		return 1;
 
 	if(opt.out) {
@@ -83,6 +85,9 @@ int main(int argc, char *argv[]) {
 	}
 
 	printf("Tried %"PRIu64" combinations, reduced to %f%% of input\n", cnt, (tmp_len*100.0)/opt.in_len);
+	free(raw);
+	free(tmp);
+	free(scratch);
 	return 0;
 }
 
