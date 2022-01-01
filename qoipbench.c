@@ -407,9 +407,8 @@ benchmark_result_t benchmark_image(const char *path) {
 		ERROR("Error decoding header %s", path);
 	}
 
-	if (channels != 3) {
+	if (channels != 3)
 		channels = 4;
-	}
 
 	void *pixels = (void *)stbi_load(path, &w, &h, NULL, channels);
 	void *encoded_png = fload(path, &encoded_png_size);
@@ -424,7 +423,7 @@ benchmark_result_t benchmark_image(const char *path) {
 	if (!encoded_qoip) {
 		ERROR("Error, malloc failed %s", path);
 	}
-	if (qoip_encode(pixels, &desc_raw, encoded_qoip, &encoded_qoip_size, NULL)) {
+	if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &encoded_qoip_size, effort, NULL, scratch)) {
 		ERROR("Error, qoip_encode failed %s", path);
 	}
 	if (!pixels || !encoded_qoip || !encoded_png) {
@@ -604,7 +603,7 @@ void benchmark_directory(const char *path, benchmark_result_t *grand_total) {
 
 int main(int argc, char **argv) {
 	if (argc < 4) {
-		printf("Usage: qoipbench <iterations> <directory> <effort> [options]\n");
+		printf("Usage: qoipbench <iterations> <effort> <directory> [options]\n");
 		printf("Options:\n");
 		printf("    --nowarmup ... don't perform a warmup run\n");
 		printf("    --nopng ...... don't run png encode/decode\n");
@@ -613,15 +612,12 @@ int main(int argc, char **argv) {
 		printf("    --nodecode ... don't run decoders\n");
 		printf("    --norecurse .. don't descend into directories\n");
 		printf("    --onlytotals . don't print individual image results\n");
-		printf("<effort>: How many opcode combinations to try\n");
-		printf("    -1: Use default combination\n");
-		printf("     0: Try a handful of handpicked combinations\n");
-		printf("     1: Try some more combinations\n");
-		printf("     2: Try many more combinations\n");
-		printf("     3: Try all viable combinations\n");
+		printf("<effort>: Which combinations to try. Either a comma-delimited\n");
+		printf("          list of user-defined options, or an integer from\n");
+		printf("          0 to 3 with an increasing number of trials\n");
 		printf("Examples\n");
-		printf("    qoipbench 10 images/textures/ 0\n");
-		printf("    qoipbench 1 images/textures/ 0 --nopng --nowarmup\n");
+		printf("    qoipbench 10 0 images/textures/ 0\n");
+		printf("    qoipbench 1 0 images/textures/ 0 --nopng --nowarmup\n");
 		exit(1);
 	}
 
