@@ -637,7 +637,7 @@ static inline int qoip_valid_char(u8 chr) {
 static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 	int i=0, num, index1_present=0;
 	*op_cnt = 0;
-	for(;opstr[i];++i) {
+	for(; opstr[i] && opstr[i]!=','; ++i) {
 		if(i==(2*OP_END))
 			return 1;/* More ops defined than exist in the implementation */
 		num = qoip_valid_char(opstr[i]);
@@ -786,7 +786,7 @@ static const qoip_fastpath_t qoip_fastpath[] = {
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
-	char opstr[513];
+	char opstr[513] = {0};
 	size_t px_pos, opstr_len;
 	int i, op_cnt = 0;
 	qoip_working_t qq = {0};
@@ -801,14 +801,14 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		desc->channels < 3 || desc->channels > 4 || desc->colorspace > 1
 	)
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
-
 	if(opstring == NULL || *opstring==0)
-		opstring = "0004080a0d";/* Default, propA */
-	if((opstr_len=strlen(opstring))%2)
+		opstring = "0004080a0d";/* Default */
+	opstr_len = strchr(opstring, ',') ? strchr(opstring, ',')-opstring : strlen(opstring);
+	if(opstr_len%2)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
 	if(opstr_len>512)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, too big");
-	strcpy(opstr, opstring);
+	memcpy(opstr, opstring, opstr_len);
 	for(i=0;i<opstr_len;++i)/*lowercase*/
 		opstr[i] += (opstr[i]>64 && opstr[i]<71) ? 32 : 0;
 	qsort(opstr, opstr_len/2, 2, qoip_opstring_comp_id);
