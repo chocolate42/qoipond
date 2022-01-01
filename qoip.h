@@ -780,10 +780,11 @@ typedef struct {
 	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
-int qoip_fastpath_cnt = 2;
+int qoip_fastpath_cnt = 3;
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{"0004080a0d", qoip_encode_propc, qoip_decode_propc},
 	{"0104090a0b0c", qoip_encode_deltax, qoip_decode_deltax},
+	{"0001020a0e", qoip_encode_idelta, qoip_decode_idelta},
+	{"0004080a0d", qoip_encode_propc, qoip_decode_propc},
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {

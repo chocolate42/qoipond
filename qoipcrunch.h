@@ -85,7 +85,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	int standalone_mask;
 	int isrgb = desc->channels==3 ? 1 : 0;
 	int set_cnt = isrgb ? 4 : 5;/* avoid alpha ops */
-	int standalone_cnt = isrgb ? 1 : 2;/* avoid alpha ops */
+	int standalone_cnt = isrgb ? 0 : 1;/* avoid alpha ops */
 	void *working = tmp?tmp:out;
 	size_t *working_len = tmp?&w_len:out_len;
 
@@ -107,16 +107,15 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	/* 8 bit tags that can be toggled present or not. These tags may overlap RUN1
 	encoding as long as at least 1 op remains for RLE. OP_RGB and OP_RGBA not included
 	as they are implicit, as is OP_RUN2. Alpha tags at end for easy RGB path */
-	int standalone[] = {OP_INDEX8, OP_A};
+	int standalone[] = {OP_A};
 
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
 		"0104090a0b0c",/*deltax*/
-		"0004080a0d",/*propc*/
-		"0001020a0e",/*index7 + delta*/
+		"0001020a0e",/*idelta*/
 		/* demo28 TODO */
 	};
-	int common_cnt = 3;
+	int common_cnt = 2;
 
 	currbest_len = qoip_maxsize(desc);
 
@@ -171,11 +170,12 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	}
 
 	do {/* Level 1-3 */
-		opcnt=3;/* Reserve space for OP_RGB/OP_RGBA/RUN2 */
+		opcnt=4;/* Reserve space for OP_RGB/OP_RGBA/RUN2/INDEX8 */
 		for(j=0;j<set_cnt;++j)
 			opcnt+=set[j].codespace[i[j]];
 		if(opcnt>=192 && opcnt<256) {
 			opstring_loc=0;
+			opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX8);
 			for(j=0;j<set_cnt;++j) {
 				if(set[j].ops[i[j]]!=OP_END)
 					opstring_loc+=sprintf(opstring+opstring_loc, "%02x", set[j].ops[i[j]]);
