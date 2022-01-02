@@ -104,7 +104,7 @@ into it. Less kludgey implementation TODO */
 enum{
 	OP_A,
 	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
-	OP_DIFF, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_RGB3,
+	OP_DIFF1_222, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_DIFF3_787,
 	OP_DELTA, OP_DELTAA,
 	OP_LUMA2_454,
 	/* new_op id goes here */
@@ -210,12 +210,13 @@ static const opdef_t qoip_ops[] = {
 	{OP_INDEX3, MASK_5, QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index,   8},
 	{OP_INDEX2, MASK_6, QOIP_SET_INDEX1, "OP_INDEX2: 1 byte,   4 value index cache", qoip_enc_index, qoip_dec_index,   4},
 
-	{OP_DIFF,       MASK_2, QOIP_SET_LEN1, "OP_DIFF:       1 byte delta,   vr  -2..1,  vg  -2..1,    vb  -2..1", qoip_enc_diff, qoip_dec_diff, 64},
+	{OP_DIFF1_222,       MASK_2, QOIP_SET_LEN1, "OP_DIFF:       1 byte delta,   vr  -2..1,  vg  -2..1,    vb  -2..1", qoip_enc_diff1_222, qoip_dec_diff1_222, 64},
 	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, vg_r  -2..1,  vg  -4..3,  vg_b  -2..1", qoip_enc_luma1_232, qoip_dec_luma1_232, 128},
 	{OP_LUMA2_464,  MASK_2, QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7", qoip_enc_luma2_464, qoip_dec_luma2_464, 64},
 	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, vg_r -32..31, vg -64..63, vg_b -32..31", qoip_enc_luma3_676, qoip_dec_luma3_676, 8},
 	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7  va -16..15", qoip_enc_luma3_4645, qoip_dec_luma3_4645, 8},
-	{OP_RGB3,       MASK_2, QOIP_SET_LEN3, "OP_RGB3:       3 byte delta,   vr -64..63,  g,           vb -64..63", qoip_enc_rgb3, qoip_dec_rgb3, 64},
+	{OP_DIFF3_787,   MASK_2, QOIP_SET_LEN3, "OP_DIFF3_787:   3 byte delta,   vr -64..63,  g,           vb -64..63", qoip_enc_diff3_787, qoip_dec_diff3_787, 64},
+
 	{OP_DELTA,      MASK_3, QOIP_SET_LEN1, "OP_DELTA:      1 byte delta,   vr  -1..1,  vg  -1..1,    vb  -1..1 missing (0,0,0), AND\n"
                                          "                                      (+-2,0,0),(0,+-2,0),(0,0,+-2)", qoip_enc_delta, qoip_dec_delta, 32},
 	{OP_DELTAA,     MASK_2, QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta,   vr  -1..1,  vg  -1..1,    vb  -1..1, va -1 or 1, AND\n"

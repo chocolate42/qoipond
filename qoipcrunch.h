@@ -98,9 +98,9 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_END, OP_INDEX3, OP_INDEX2},
 			{32, 64, 16, 128, 0, 8, 4},
 		},
-		{ {1,2,3}, {OP_DIFF, OP_LUMA1_232, OP_DELTA}, {64, 128, 32} },
+		{ {1,2,3}, {OP_DIFF1_222, OP_LUMA1_232, OP_DELTA}, {64, 128, 32} },
 		{ {1,2,2}, {OP_LUMA2_464, OP_END}, {64, 0} },
-		{ {2,2,3}, {OP_END, OP_RGB3, OP_LUMA3_676}, {0, 64, 8} },
+		{ {2,2,3}, {OP_END, OP_DIFF3_787, OP_LUMA3_676}, {0, 64, 8} },
 		{ {1,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },/* alpha */
 	};
 

@@ -20,7 +20,7 @@ static void qoip_dec_a(qoip_working_t *q) {
 	q->px.rgba.a = q->in[q->p++];
 }
 
-static int qoip_enc_diff(qoip_working_t *q, u8 opcode) {
+static int qoip_enc_diff1_222(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->vr > -3 && q->vr < 2 &&
@@ -32,7 +32,7 @@ static int qoip_enc_diff(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_diff(qoip_working_t *q) {
+static void qoip_dec_diff1_222(qoip_working_t *q) {
 	q->px.rgba.r += ((q->in[q->p] >> 4) & 0x03) - 2;
 	q->px.rgba.g += ((q->in[q->p] >> 2) & 0x03) - 2;
 	q->px.rgba.b += ( q->in[q->p]       & 0x03) - 2;
@@ -179,7 +179,7 @@ static void qoip_dec_luma3_676(qoip_working_t *q) {
 	q->px.rgba.b += vg - 32 + (((b2 & 0x0f) << 2) | ((b3 >> 6) & 0x03));
 }
 
-static int qoip_enc_rgb3(qoip_working_t *q, u8 opcode) {
+static int qoip_enc_diff3_787(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->vr >  -65 && q->vr <  64 &&
@@ -192,7 +192,7 @@ static int qoip_enc_rgb3(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_rgb3(qoip_working_t *q) {
+static void qoip_dec_diff3_787(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
