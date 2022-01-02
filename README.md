@@ -76,3 +76,13 @@ qoip_footer {
 - Opcodes are defined in the header and cannot be changed mid-bitstream
 - Multiple 1 byte index encodings cannot be used simultaneously
 
+## Code overview
+- qoip.h - Main header containing the main QOIP functions including the generic path implementation
+- qoipcrunch.h - Contains crunch function that tries many combinations, included by anything that wants to crunch
+- qoipbench.c - Commandline benchmark comparing QOIP, PNG and STBI formats
+- qoipconv.c - Commandline converter to/from QOIP format
+- qoipcrunch.c - Commandline crunch program, reduces size of a QOIP file by trying many opcode combinations
+- qoipcrunch-opt.h - Argument parsing for qoipcrunch.c, generated from a JSON file not currently included in the repo
+- qoip-fast.c - Fastpath implementations for commonly used opcode combinations. Included by the QOIP_C implementation only, split from qoip.h to make it less unwieldy
+- qoip-func.c - Encode/decode functions for opcodes used by the generic path. Included by the QOIP_C implementation only, split from qoip.h to make it less unwieldy
+
