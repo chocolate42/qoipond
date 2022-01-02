@@ -70,8 +70,9 @@ qoip_footer {
 
 - Opcodes OP_RGB and OP_RGBA are mandatory and implicit for all combinations as worst-case encodings
 - OP_RUN2 is mandatory and implicit for all combinations
-- OP_RUN1 is implicit, taking up all remaining opcodes after the explicit and mandatory ops have been assigned meaning valid combinations always use all of the opcode space
+- OP_RUN1 is implicit, taking up all remaining opcodes after the explicit and mandatory ops have been assigned (meaning valid combinations always use all of the opcode space)
 - Opcodes cannot have overlapping encodings
+- When RLE can be used it must be used
 - Opcodes are defined in the header and cannot be changed mid-bitstream
 - Multiple 1 byte index encodings cannot be used simultaneously
 
