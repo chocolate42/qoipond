@@ -86,6 +86,28 @@ static void qoip_dec_luma1_232(qoip_working_t *q) {
 	q->px.rgba.b += vg - 2 + ((b1     ) & 0x03);
 }
 
+static int qoip_enc_luma2_454(qoip_working_t *q, u8 opcode) {
+	if (
+		q->va == 0 &&
+		q->vg_r >  -9 && q->vg_r <  8 &&
+		q->vg   > -17 && q->vg   < 16 &&
+		q->vg_b >  -9 && q->vg_b <  8
+	) {
+		q->out[q->p++] = opcode             | (q->vg   + 16);
+		q->out[q->p++] = (q->vg_r + 8) << 4 | (q->vg_b +  8);
+		return 1;
+	}
+	return 0;
+}
+static void qoip_dec_luma2_454(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = (b1 & 0x1f) - 16;
+	q->px.rgba.r += vg - 8 + ((b2 >> 4) & 0x0f);
+	q->px.rgba.g += vg;
+	q->px.rgba.b += vg - 8 +  (b2       & 0x0f);
+}
+
 static int qoip_enc_luma2_464(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&

@@ -106,6 +106,7 @@ enum{
 	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
 	OP_DIFF, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_RGB3,
 	OP_DELTA, OP_DELTAA,
+	OP_LUMA2_454,
 	/* new_op id goes here */
 	OP_END
 };
@@ -219,6 +220,7 @@ static const opdef_t qoip_ops[] = {
                                          "                                      (+-2,0,0),(0,+-2,0),(0,0,+-2)", qoip_enc_delta, qoip_dec_delta, 32},
 	{OP_DELTAA,     MASK_2, QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta,   vr  -1..1,  vg  -1..1,    vb  -1..1, va -1 or 1, AND\n"
                                          "                                      vr==vg==vb==0, va -6..6", qoip_enc_deltaa, qoip_dec_deltaa, 64},
+	{OP_LUMA2_454,  MASK_3, QOIP_SET_LEN2, "OP_LUMA2_454:  2 byte delta, vg_r  -8..7,  vg -16..15, vg_b  -8..7", qoip_enc_luma2_454, qoip_dec_luma2_454, 32},
 	/* new_op definitions go here*/
 	{OP_END},
 };
