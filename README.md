@@ -68,9 +68,10 @@ qoip_footer {
 
 ## Limitations
 
-- A 1 byte RLE op (RUN1, all RUN1_* ops) must exist (this could potentially be relaxed to any RLE encoding)
-- Opcodes cannot have overlapping encodings, except 8-bit-tag ops possibly overlapping with the end of the RUN1 op (which is automatic if the tags have nowhere else to go)
-- Opcodes used in a bitstream are defined in the header and cannot be changed mid-bitstream
-- Multiple 1 byte RUN1 ops cannot be used simultaneously
+- Opcodes OP_RGB and OP_RGBA are mandatory and implicit for all combinations as worst-case encodings
+- OP_RUN2 is mandatory and implicit for all combinations
+- OP_RUN1 is implicit, taking up all remaining opcodes after the explicit and mandatory ops have been assigned meaning valid combinations always use all of the opcode space
+- Opcodes cannot have overlapping encodings
+- Opcodes are defined in the header and cannot be changed mid-bitstream
 - Multiple 1 byte index encodings cannot be used simultaneously
 
