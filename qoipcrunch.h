@@ -95,12 +95,12 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	qoip_set_t set[] = {
 		{
 			{2,4,5},
-			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_END, OP_INDEX3, OP_INDEX2},
+			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_END, OP_INDEX3},
 			{32, 64, 16, 128, 0, 8, 4},
 		},
 		{ {1,2,3}, {OP_DIFF1_222, OP_LUMA1_232, OP_DELTA}, {64, 128, 32} },
 		{ {1,2,2}, {OP_LUMA2_464, OP_END}, {64, 0} },
-		{ {2,2,3}, {OP_END, OP_DIFF3_787, OP_LUMA3_676}, {0, 64, 8} },
+		{ {2,2,3}, {OP_END, OP_LUMA3_787, OP_LUMA3_676}, {0, 64, 8} },
 		{ {1,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },/* alpha */
 	};
 
@@ -111,11 +111,12 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *common[] = {
-		"0104090a0b0c",/*deltax*/
-		"0001020a0e",/*idelta*/
+		"080a030b1100",         /*deltax*/
+		"010a060f00",           /*idelta*/
+		"03000f06090c1012130e", /*heavy alpha focus*/
 		/* demo28 TODO */
 	};
-	int common_cnt = 2;
+	int common_cnt = 3;
 
 	currbest_len = qoip_maxsize(desc);
 

@@ -102,11 +102,15 @@ than at the end. Doing this allows for basic backwards compatibility. The order
 of this enum must match the order of qoip_ops[] as these values are an index
 into it. Less kludgey implementation TODO */
 enum{
-	OP_A,
-	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3, OP_INDEX2,
-	OP_DIFF1_222, OP_LUMA1_232, OP_LUMA2_464, OP_LUMA3_676, OP_LUMA3_4645, OP_DIFF3_787,
-	OP_DELTA, OP_DELTAA,
-	OP_LUMA2_454,
+	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3,
+
+	/* 1 byte RGB  ops */OP_DELTA, OP_DIFF1_222, OP_LUMA1_232,
+	/* 2 byte RGB  ops */OP_LUMA2_454, OP_LUMA2_464,
+	/* 3 byte RGB  ops */OP_LUMA3_676, OP_LUMA3_686, OP_LUMA3_787,
+	/* 1 byte RGBA ops */OP_DELTAA,
+	/* 2 byte RGBA ops */OP_A, OP_LUMA2_3433,
+	/* 3 byte RGBA ops */OP_LUMA3_4645, OP_LUMA3_5654,
+	/* 4 byte RGBA ops */OP_LUMA4_7777,
 	/* new_op id goes here */
 	OP_END
 };
@@ -201,27 +205,33 @@ typedef struct {
 /* For ease of implementation treat qoip_ops the same as the opcode enum.
 Corresponding values must be in the same relative location */
 static const opdef_t qoip_ops[] = {
-	{OP_A,      MASK_8, QOIP_SET_LEN2, "OP_A:    2 byte, store    A verbatim", qoip_enc_a, qoip_dec_a, 1},
 	{OP_INDEX8, MASK_8, QOIP_SET_INDEX2, "OP_INDEX8: 2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8, 1},
 	{OP_INDEX7, MASK_1, QOIP_SET_INDEX1, "OP_INDEX7: 1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index, 128},
 	{OP_INDEX6, MASK_2, QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index,  64},
 	{OP_INDEX5, MASK_3, QOIP_SET_INDEX1, "OP_INDEX5: 1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index,  32},
 	{OP_INDEX4, MASK_4, QOIP_SET_INDEX1, "OP_INDEX4: 1 byte,  16 value index cache", qoip_enc_index, qoip_dec_index,  16},
 	{OP_INDEX3, MASK_5, QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index,   8},
-	{OP_INDEX2, MASK_6, QOIP_SET_INDEX1, "OP_INDEX2: 1 byte,   4 value index cache", qoip_enc_index, qoip_dec_index,   4},
-
-	{OP_DIFF1_222,       MASK_2, QOIP_SET_LEN1, "OP_DIFF:       1 byte delta,   vr  -2..1,  vg  -2..1,    vb  -2..1", qoip_enc_diff1_222, qoip_dec_diff1_222, 64},
-	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, vg_r  -2..1,  vg  -4..3,  vg_b  -2..1", qoip_enc_luma1_232, qoip_dec_luma1_232, 128},
-	{OP_LUMA2_464,  MASK_2, QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7", qoip_enc_luma2_464, qoip_dec_luma2_464, 64},
-	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, vg_r -32..31, vg -64..63, vg_b -32..31", qoip_enc_luma3_676, qoip_dec_luma3_676, 8},
-	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7  va -16..15", qoip_enc_luma3_4645, qoip_dec_luma3_4645, 8},
-	{OP_DIFF3_787,   MASK_2, QOIP_SET_LEN3, "OP_DIFF3_787:   3 byte delta,   vr -64..63,  g,           vb -64..63", qoip_enc_diff3_787, qoip_dec_diff3_787, 64},
 
 	{OP_DELTA,      MASK_3, QOIP_SET_LEN1, "OP_DELTA:      1 byte delta,   vr  -1..1,  vg  -1..1,    vb  -1..1 missing (0,0,0), AND\n"
-                                         "                                      (+-2,0,0),(0,+-2,0),(0,0,+-2)", qoip_enc_delta, qoip_dec_delta, 32},
-	{OP_DELTAA,     MASK_2, QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta,   vr  -1..1,  vg  -1..1,    vb  -1..1, va -1 or 1, AND\n"
-                                         "                                      vr==vg==vb==0, va -6..6", qoip_enc_deltaa, qoip_dec_deltaa, 64},
+                                         "                               (+-2,0,0),(0,+-2,0),(0,0,+-2)", qoip_enc_delta, qoip_dec_delta, 32},
+	{OP_DIFF1_222,  MASK_2, QOIP_SET_LEN1, "OP_DIFF:       1 byte delta,   vr  -2..1,  vg  -2..1,    vb  -2..1", qoip_enc_diff1_222, qoip_dec_diff1_222, 64},
+	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, vg_r  -2..1,  vg  -4..3,  vg_b  -2..1", qoip_enc_luma1_232, qoip_dec_luma1_232, 128},
+
 	{OP_LUMA2_454,  MASK_3, QOIP_SET_LEN2, "OP_LUMA2_454:  2 byte delta, vg_r  -8..7,  vg -16..15, vg_b  -8..7", qoip_enc_luma2_454, qoip_dec_luma2_454, 32},
+	{OP_LUMA2_464,  MASK_2, QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7", qoip_enc_luma2_464, qoip_dec_luma2_464, 64},
+
+	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, vg_r -32..31, vg -64..63, vg_b -32..31", qoip_enc_luma3_676, qoip_dec_luma3_676, 8},
+	{OP_LUMA3_686,  MASK_4, QOIP_SET_LEN3, "OP_LUMA3_686:  3 byte delta, vg_r -32..31,  g,         vg_b -32..31", qoip_enc_luma3_686, qoip_dec_luma3_686, 16},
+	{OP_LUMA3_787,  MASK_2, QOIP_SET_LEN3, "OP_LUMA3_787:  3 byte delta, vg_r -64..63,  g,         vg_b -64..63", qoip_enc_luma3_787, qoip_dec_luma3_787, 64},
+
+	{OP_DELTAA,     MASK_2, QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta,   vr  -1..1,  vg  -1..1,    vb  -1..1, va -1 or 1, AND\n"
+                                         "                               vr == vg == vb == 0, va -6..6", qoip_enc_deltaa, qoip_dec_deltaa, 64},
+	{OP_A,      MASK_8, QOIP_SET_LEN2, "OP_A:    2 byte, store    A verbatim", qoip_enc_a, qoip_dec_a, 1},
+	{OP_LUMA2_3433, MASK_3, QOIP_SET_LEN2, "OP_LUMA2_3433: 2 byte delta, vg_r  -4..3,   vg -8..7,  vg_b  -4..3,   va  -4..3", qoip_enc_luma2_3433, qoip_dec_luma2_3433, 32},
+	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, vg_r  -8..7,  vg -32..31, vg_b  -8..7   va -16..15", qoip_enc_luma3_4645, qoip_dec_luma3_4645, 8},
+	{OP_LUMA3_5654, MASK_4, QOIP_SET_LEN3, "OP_LUMA3_5654: 3 byte delta, vg_r -16..15, vg -32..31, vg_b -16..15, va  -8..7", qoip_enc_luma3_5654, qoip_dec_luma3_5654, 16},
+	{OP_LUMA4_7777, MASK_4, QOIP_SET_LEN4, "OP_LUMA4_7777: 4 byte delta, vg_r -64..63, vg -64..63, vg_b -64..63, va -64..63", qoip_enc_luma4_7777, qoip_dec_luma4_7777, 16},
+
 	/* new_op definitions go here*/
 	{OP_END},
 };
@@ -546,9 +556,9 @@ typedef struct {
 
 int qoip_fastpath_cnt = 3;
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{"0104090a0b0c", qoip_encode_deltax, qoip_decode_deltax},
-	{"0001020a0e", qoip_encode_idelta, qoip_decode_idelta},
-	{"0004080a0d", qoip_encode_propc, qoip_decode_propc},
+	{"080a030b1100", qoip_encode_deltax, qoip_decode_deltax},
+	{"010a060f00", qoip_encode_idelta, qoip_decode_idelta},
+	{"070a0d030f", qoip_encode_propc, qoip_decode_propc},
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
@@ -568,7 +578,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	)
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 	if(opstring == NULL || *opstring==0)
-		opstring = "0104090a0b0c";/* Default */
+		opstring = "080a030b1100";/* Default */
 	opstr_len = strchr(opstring, ',') ? strchr(opstring, ',')-opstring : strlen(opstring);
 	if(opstr_len%2)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
