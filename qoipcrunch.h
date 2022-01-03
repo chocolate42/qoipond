@@ -76,16 +76,13 @@ static int qoipcrunch_iterate(int level, qoip_set_t *set, int set_cnt, int *inde
 }
 
 int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp) {
-	char currbest_str[256], opstring[256], opstring2[256], *next_opstring;
-	int i[8]={0}, j, opcnt, opstring_loc, opstring2_loc;
+	char currbest_str[256], opstring[256], *next_opstring;
+	int i[8]={0}, j, opcnt, opstring_loc;
 	size_t currbest_len, w_len;
 	size_t cnt = 0;
 	int level = -1;
-	int standalone_use;
-	int standalone_mask;
 	int isrgb = desc->channels==3 ? 1 : 0;
 	int set_cnt = isrgb ? 3 : 7;/* avoid alpha ops */
-	int standalone_cnt = isrgb ? 0 : 1;/* avoid alpha ops */
 	void *working = tmp?tmp:out;
 	size_t *working_len = tmp?&w_len:out_len;
 
@@ -98,14 +95,9 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		{ {2,3,4}, {OP_END, OP_LUMA3_686, OP_LUMA3_676, OP_LUMA3_787}, {0,16,8,64} },
 		{ {1,1,2}, {OP_END, OP_DELTAA}, {0,64} },
 		{ {1,1,2}, {OP_A, OP_LUMA2_3433}, {1,32} },
-		{ {1,2,3}, {OP_END, OP_LUMA3_4645, OP_LUMA3_5654}, {8,16} },
+		{ {1,2,3}, {OP_END, OP_LUMA3_4645, OP_LUMA3_5654}, {0, 8,16} },
 		{ {1,1,2}, {OP_END, OP_LUMA4_7777}, {0,16} },
 	};
-
-	/* 8 bit tags that can be toggled present or not. These tags may overlap RUN1
-	encoding as long as at least 1 op remains for RLE. OP_RGB and OP_RGBA not included
-	as they are implicit, as is OP_RUN2. Alpha tags at end for easy RGB path */
-	int standalone[] = {OP_A};
 
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *list0[] = {
@@ -172,34 +164,32 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		opcnt=4;/* Reserve space for OP_RGB/OP_RGBA/RUN2/INDEX8 */
 		for(j=0;j<set_cnt;++j)
 			opcnt+=set[j].codespace[i[j]];
-		if(opcnt>=192 && opcnt<256) {
+		if(opcnt<256) {
 			opstring_loc=0;
 			opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX8);
 			for(j=0;j<set_cnt;++j) {
 				if(set[j].ops[i[j]]!=OP_END)
 					opstring_loc+=sprintf(opstring+opstring_loc, "%02x", set[j].ops[i[j]]);
 			}
-			standalone_use=0;
-			for(standalone_mask=0; standalone_mask < (1<<standalone_cnt); ++standalone_mask ) {
-				strcpy(opstring2, opstring);
-				opstring2_loc=opstring_loc;
-				for(j=0;j<standalone_cnt;++j) {
-					if(standalone_mask & (1<<j)) {
-						opstring2_loc+=sprintf(opstring2+opstring2_loc, "%02x", standalone[j]);
-						++standalone_use;
-					}
-				}
-				if((standalone_use+opcnt)<256) {
-					if(qoip_encode(data, desc, working, working_len, opstring2))
-						return 1;
-					if(tmp && currbest_len>*working_len) {
-						memcpy(out, tmp, *working_len);
-						*out_len = *working_len;
-					}
-					++cnt;
-				}
+			/*Add the biggest index we can*/
+			if(opcnt<=128)
+				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX7);
+			else if(opcnt<=192)
+				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX6);
+			else if(opcnt<=224)
+				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX5);
+			else if(opcnt<=240)
+				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX4);
+			else if(opcnt<=248)
+				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX3);
+			if(qoip_encode(data, desc, working, working_len, opstring))
+				return 1;
+			if(tmp && currbest_len>*working_len) {
+				memcpy(out, tmp, *working_len);
+				*out_len = *working_len;
 			}
-			qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, opstring2);
+			++cnt;
+			qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, opstring);
 		}
 	} while(!qoipcrunch_iterate(level-1, set, set_cnt, i));
 
