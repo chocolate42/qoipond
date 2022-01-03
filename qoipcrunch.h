@@ -84,7 +84,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	int standalone_use;
 	int standalone_mask;
 	int isrgb = desc->channels==3 ? 1 : 0;
-	int set_cnt = isrgb ? 4 : 5;/* avoid alpha ops */
+	int set_cnt = isrgb ? 3 : 7;/* avoid alpha ops */
 	int standalone_cnt = isrgb ? 0 : 1;/* avoid alpha ops */
 	void *working = tmp?tmp:out;
 	size_t *working_len = tmp?&w_len:out_len;
@@ -93,15 +93,13 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	OP_END indicates that "no op" is a valid choice from a set
 	These sets are non-overlapping */
 	qoip_set_t set[] = {
-		{
-			{2,4,5},
-			{OP_INDEX5, OP_INDEX6, OP_INDEX4, OP_INDEX7, OP_END, OP_INDEX3},
-			{32, 64, 16, 128, 0, 8, 4},
-		},
-		{ {1,2,3}, {OP_DIFF1_222, OP_LUMA1_232, OP_DELTA}, {64, 128, 32} },
-		{ {1,2,2}, {OP_LUMA2_464, OP_END}, {64, 0} },
-		{ {2,2,3}, {OP_END, OP_LUMA3_787, OP_LUMA3_676}, {0, 64, 8} },
-		{ {1,2,2}, {OP_END, OP_LUMA3_4645}, {0, 8} },/* alpha */
+		{ {1,2,3}, {OP_DIFF1_222, OP_LUMA1_232, OP_DELTA}, {64,128,32} },
+		{ {1,1,2}, {OP_LUMA2_464, OP_LUMA2_454}, {64,32} },
+		{ {2,3,4}, {OP_END, OP_LUMA3_686, OP_LUMA3_676, OP_LUMA3_787}, {0,16,8,64} },
+		{ {1,1,2}, {OP_END, OP_DELTAA}, {0,64} },
+		{ {1,1,2}, {OP_A, OP_LUMA2_3433}, {1,32} },
+		{ {1,2,3}, {OP_END, OP_LUMA3_4645, OP_LUMA3_5654}, {8,16} },
+		{ {1,1,2}, {OP_END, OP_LUMA4_7777}, {0,16} },
 	};
 
 	/* 8 bit tags that can be toggled present or not. These tags may overlap RUN1
@@ -110,13 +108,13 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	int standalone[] = {OP_A};
 
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
-	char *common[] = {
+	char *list0[] = {
 		"080a030b1100",         /*deltax*/
 		"010a060f00",           /*idelta*/
 		"03000f06090c1012130e", /*heavy alpha focus*/
 		/* demo28 TODO */
 	};
-	int common_cnt = 3;
+	int list0_cnt = 3;
 
 	currbest_len = qoip_maxsize(desc);
 
@@ -151,15 +149,15 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		return 0;
 	}
 
-	/* Do common opstrings */
-	for(j=0;j<common_cnt;++j) {
-		if(qoip_encode(data, desc, working, working_len, common[j]))
+	/* Do list0 opstrings */
+	for(j=0;j<list0_cnt;++j) {
+		if(qoip_encode(data, desc, working, working_len, list0[j]))
 			return 1;
 		if(tmp && currbest_len>*working_len) {
 			memcpy(out, tmp, *working_len);
 			*out_len = *working_len;
 		}
-		qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, common[j]);
+		qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, list0[j]);
 		++cnt;
 	}
 	if(level==0) {

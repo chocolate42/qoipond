@@ -238,7 +238,7 @@ static const opdef_t qoip_ops[] = {
 
 void qoip_print_ops(const opdef_t *ops, FILE *io) {
 	for(;ops->id!=OP_END;++ops)
-		fprintf(io, "id=%02x, %s\n", ops->id, ops->desc);
+		fprintf(io, "id=%02x, size=%3d, %s\n", ops->id, ops->opcnt, ops->desc);
 }
 
 void qoip_print_op(const opdef_t *op, FILE *io) {
@@ -556,9 +556,9 @@ typedef struct {
 
 int qoip_fastpath_cnt = 3;
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{"080a030b1100", qoip_encode_deltax, qoip_decode_deltax},
-	{"010a060f00", qoip_encode_idelta, qoip_decode_idelta},
-	{"070a0d030f", qoip_encode_propc, qoip_decode_propc},
+	{"0003080a0b11", qoip_encode_deltax, qoip_decode_deltax},
+	{"0001060a0f", qoip_encode_idelta, qoip_decode_idelta},
+	{"03070a0d0f", qoip_encode_propc, qoip_decode_propc},
 };
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
@@ -578,7 +578,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	)
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 	if(opstring == NULL || *opstring==0)
-		opstring = "080a030b1100";/* Default */
+		opstring = "0003080a0b11";/* Default */
 	opstr_len = strchr(opstring, ',') ? strchr(opstring, ',')-opstring : strlen(opstring);
 	if(opstr_len%2)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
