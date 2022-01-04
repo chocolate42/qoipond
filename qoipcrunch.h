@@ -101,9 +101,9 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	/* Handpicked combinations for level 0, ideally these would all have fastpaths */
 	char *list0[] = {
-		"080a030b1100",         /*deltax*/
-		"010a060f00",           /*idelta*/
-		"03000f06090c1012130e", /*heavy alpha focus*/
+		"0003080a0b11",         /*deltax*/
+		"0001060a0f",           /*idelta*/
+		"000306090c0e0f101213", /*heavy alpha focus*/
 		/* demo28 TODO */
 	};
 	int list0_cnt = 3;
@@ -172,15 +172,15 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 					opstring_loc+=sprintf(opstring+opstring_loc, "%02x", set[j].ops[i[j]]);
 			}
 			/*Add the biggest index we can*/
-			if(opcnt<=128)
+			if(opcnt<(128-3))
 				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX7);
-			else if(opcnt<=192)
+			else if(opcnt<(192-3))
 				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX6);
-			else if(opcnt<=224)
+			else if(opcnt<(224-3))
 				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX5);
-			else if(opcnt<=240)
+			else if(opcnt<(240-3))
 				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX4);
-			else if(opcnt<=248)
+			else if(opcnt<(248-3))
 				opstring_loc+=sprintf(opstring+opstring_loc, "%02x", OP_INDEX3);
 			if(qoip_encode(data, desc, working, working_len, opstring))
 				return 1;
