@@ -116,6 +116,41 @@ static void qoip_dec_diff1_222(qoip_working_t *q) {
 	++q->p;
 }
 
+static int qoip_enc_luma1_232_bias(qoip_working_t *q, u8 opcode) {
+	if (
+		q->va == 0 &&
+		q->vg   > -5 && q->vg   < 0 &&
+		q->vg_r > -2 && q->vg_r < 3 &&
+		q->vg_b > -2 && q->vg_b < 3
+	) {
+		q->out[q->p++] = opcode | (q->vg + 4) << 4 | (q->vg_r + 1) << 2 | (q->vg_b + 1);
+		return 1;
+	}
+	else if (
+		q->va == 0 &&
+		q->vg   > -1 && q->vg   < 4 &&
+		q->vg_r > -3 && q->vg_r < 2 &&
+		q->vg_b > -3 && q->vg_b < 2
+	) {
+		q->out[q->p++] = opcode | (q->vg + 4) << 4 | (q->vg_r + 2) << 2 | (q->vg_b + 2);
+		return 1;
+	}
+	return 0;
+}
+static void qoip_dec_luma1_232_bias(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int vg = ((b1 >> 4) & 7) - 4;
+	q->px.rgba.g += vg;
+	if (vg < 0) {
+		q->px.rgba.r += vg - 1 + ((b1 >> 2) & 3);
+		q->px.rgba.b += vg - 1 +  (b1 &  3);
+	}
+	else {
+		q->px.rgba.r += vg - 2 + ((b1 >> 2) & 3);
+		q->px.rgba.b += vg - 2 +  (b1 &  3);
+	}
+}
+
 static int qoip_enc_luma1_232(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&

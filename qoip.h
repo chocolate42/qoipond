@@ -111,6 +111,7 @@ enum{
 	/* 2 byte RGBA ops */OP_A, OP_LUMA2_3433,
 	/* 3 byte RGBA ops */OP_LUMA3_4645, OP_LUMA3_5654,
 	/* 4 byte RGBA ops */OP_LUMA4_7777,
+	OP_LUMA1_232_BIAS,
 	/* new_op id goes here */
 	OP_END
 };
@@ -232,6 +233,8 @@ static const opdef_t qoip_ops[] = {
 	{OP_LUMA3_5654, MASK_4, QOIP_SET_LEN3, "OP_LUMA3_5654: 3 byte delta, vg_r -16..15, vg -32..31, vg_b -16..15, va  -8..7", qoip_enc_luma3_5654, qoip_dec_luma3_5654, 16},
 	{OP_LUMA4_7777, MASK_4, QOIP_SET_LEN4, "OP_LUMA4_7777: 4 byte delta, vg_r -64..63, vg -64..63, vg_b -64..63, va -64..63", qoip_enc_luma4_7777, qoip_dec_luma4_7777, 16},
 
+
+	{OP_LUMA1_232_BIAS,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232_BIAS:  1 byte delta, OP_LUMA1_232 but with R and B biased in the direction of G", qoip_enc_luma1_232_bias, qoip_dec_luma1_232_bias, 128},
 	/* new_op definitions go here*/
 	{OP_END},
 };
