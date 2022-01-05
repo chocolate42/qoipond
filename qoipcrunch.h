@@ -59,7 +59,7 @@ static void qoipcrunch_update_stats(size_t *currbest_len, char *currbest_str, si
 }
 
 int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp) {
-	char currbest_str[256], opstring[256], *next_opstring;
+	char currbest_str[256], *next_opstring;
 	int j;
 	size_t currbest_len, w_len;
 	size_t cnt = 0;
@@ -121,7 +121,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 			*out_len = *working_len;
 		}
 		++cnt;
-		qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, opstring);
+		qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, list[j]);
 	}
 
 	if(count)
