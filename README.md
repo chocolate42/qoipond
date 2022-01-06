@@ -17,7 +17,7 @@ Flexibility like this means:
 - Caters to different use cases by allowing encode/decode/compression metrics to be balanced by the user
 - General case performance takes a hit relative to a fixed-opcode format (mostly due to having to use function pointers to swap out opcodes)
 - Fast-path performance optimisations can be implemented for commonly used opcode combinations, allowing them to be just as performant as if used in a fixed-opcode format (TODO)
-- The format can be extended to more pixel formats like higher bit depths (TODO)
+- The format can be extended with more opcodes for better compression or to support different types of input (potentially higher bit depths, YCbCr, chroma subsampling)
 
 ## What this is
 
