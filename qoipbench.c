@@ -43,6 +43,8 @@ SOFTWARE.
 #include "qoipcrunch.h"
 #define QOIP_C
 #include "qoip.h"
+#define OPT_C
+#include "qoipbench-opt.h"
 
 // -----------------------------------------------------------------------------
 // Cross platform high resolution timer
@@ -302,16 +304,6 @@ void *fload(const char *path, int *out_size) {
 // -----------------------------------------------------------------------------
 // benchmark runner
 
-int opt_runs = 1;
-int opt_nopng = 0;
-int opt_nowarmup = 0;
-int opt_noverify = 0;
-int opt_nodecode = 0;
-int opt_noencode = 0;
-int opt_norecurse = 0;
-int opt_onlytotals = 0;
-char *effort;
-
 typedef struct {
 	uint64_t size;
 	uint64_t encode_time;
@@ -329,8 +321,7 @@ typedef struct {
 	benchmark_lib_result_t qoip;
 } benchmark_result_t;
 
-
-void benchmark_print_result(benchmark_result_t res) {
+void benchmark_print_result(opt_t *opt, char *effort, benchmark_result_t res) {
 	res.px /= res.count;
 	res.raw_size /= res.count;
 	res.libpng.encode_time /= res.count;
@@ -345,7 +336,7 @@ void benchmark_print_result(benchmark_result_t res) {
 
 	double px = res.px;
 	printf("decode_ms  encode_ms  decode_mpps  encode_mpps  size_kb  rate\n");
-	if (!opt_nopng) {
+	if (opt->png) {
 		printf(
 			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: libpng\n",
 			(double)res.libpng.decode_time/1000000.0,
@@ -394,8 +385,7 @@ void benchmark_print_result(benchmark_result_t res) {
 		AVG_TIME = time / RUNS; \
 	} while (0)
 
-
-benchmark_result_t benchmark_image(const char *path) {
+benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 	int encoded_png_size;
 	size_t encoded_qoip_size;
 	int w;
@@ -443,7 +433,7 @@ benchmark_result_t benchmark_image(const char *path) {
 	}
 
 	// Verify QOIP Output
-	if (!opt_noverify) {
+	if (opt->verify) {
 		if(qoip_decode(encoded_qoip, encoded_qoip_size, &desc_enc, channels, pixels_qoip)) {
 			ERROR("Error, verify qoip_decode failed %s", path);
 		}
@@ -460,22 +450,22 @@ benchmark_result_t benchmark_image(const char *path) {
 	res.h = h;
 
 	// Decoding
-	if (!opt_nodecode) {
-		if (!opt_nopng) {
-			BENCHMARK_FN(opt_nowarmup, opt_runs, res.libpng.decode_time, {
+	if (opt->decode) {
+		if (opt->png) {
+			BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.libpng.decode_time, {
 				int dec_w, dec_h;
 				void *dec_p = libpng_decode(encoded_png, encoded_png_size, &dec_w, &dec_h);
 				free(dec_p);
 			});
 
-			BENCHMARK_FN(opt_nowarmup, opt_runs, res.stbi.decode_time, {
+			BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.stbi.decode_time, {
 				int dec_w, dec_h, dec_channels;
 				void *dec_p = stbi_load_from_memory(encoded_png, encoded_png_size, &dec_w, &dec_h, &dec_channels, 4);
 				free(dec_p);
 			});
 		}
 
-		BENCHMARK_FN(opt_nowarmup, opt_runs, res.qoip.decode_time, {
+		BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.qoip.decode_time, {
 			qoip_desc desc;
 			if(qoip_decode(encoded_qoip, encoded_qoip_size, &desc, 4, pixels_qoip)) {
 				ERROR("Error, qoip_decode failed %s", path);
@@ -486,23 +476,23 @@ benchmark_result_t benchmark_image(const char *path) {
 	free(pixels_qoip);
 
 	// Encoding
-	if (!opt_noencode) {
-		if (!opt_nopng) {
-			BENCHMARK_FN(opt_nowarmup, opt_runs, res.libpng.encode_time, {
+	if (opt->encode) {
+		if (opt->png) {
+			BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.libpng.encode_time, {
 				int enc_size;
 				void *enc_p = libpng_encode(pixels, w, h, channels, &enc_size);
 				res.libpng.size = enc_size;
 				free(enc_p);
 			});
 
-			BENCHMARK_FN(opt_nowarmup, opt_runs, res.stbi.encode_time, {
+			BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.stbi.encode_time, {
 				int enc_size = 0;
 				stbi_write_png_to_func(stbi_write_callback, &enc_size, w, h, channels, pixels, 0);
 				res.stbi.size = enc_size;
 			});
 		}
 
-		BENCHMARK_FN(opt_nowarmup, opt_runs, res.qoip.encode_time, {
+		BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.qoip.encode_time, {
 			size_t enc_size;
 			if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL, scratch)) {
 				ERROR("Error, qoip_encode failed %s", path);
@@ -519,7 +509,7 @@ benchmark_result_t benchmark_image(const char *path) {
 	return res;
 }
 
-void benchmark_directory(const char *path, benchmark_result_t *grand_total) {
+void benchmark_directory(opt_t *opt, char *effort, const char *path, benchmark_result_t *grand_total) {
 	DIR *dir = opendir(path);
 	if (!dir) {
 		ERROR("Couldn't open directory %s", path);
@@ -527,7 +517,7 @@ void benchmark_directory(const char *path, benchmark_result_t *grand_total) {
 
 	struct dirent *file;
 
-	if (!opt_norecurse) {
+	if (opt->recurse) {
 		for (int i = 0; (file = readdir(dir)) != NULL; i++) {
 			if (
 				file->d_type & DT_DIR &&
@@ -536,7 +526,7 @@ void benchmark_directory(const char *path, benchmark_result_t *grand_total) {
 			) {
 				char subpath[1024];
 				snprintf(subpath, 1024, "%s/%s", path, file->d_name);
-				benchmark_directory(subpath, grand_total);
+				benchmark_directory(opt, effort, subpath, grand_total);
 			}
 		}
 		rewinddir(dir);
@@ -552,17 +542,17 @@ void benchmark_directory(const char *path, benchmark_result_t *grand_total) {
 
 		if (!has_shown_heaad) {
 			has_shown_heaad = 1;
-			printf("## Benchmarking %s/*.png -- %d runs\n\n", path, opt_runs);
+			printf("## Benchmarking %s/*.png -- %d runs\n\n", path, opt->iterations);
 		}
 
 		char *file_path = malloc(strlen(file->d_name) + strlen(path)+8);
 		sprintf(file_path, "%s/%s", path, file->d_name);
 
-		benchmark_result_t res = benchmark_image(file_path);
+		benchmark_result_t res = benchmark_image(opt, effort, file_path);
 
-		if (!opt_onlytotals) {
+		if (!opt->onlytotals) {
 			printf("## %s size: %dx%d\n", file_path, res.w, res.h);
-			benchmark_print_result(res);
+			benchmark_print_result(opt, effort, res);
 		}
 
 		free(file_path);
@@ -597,56 +587,37 @@ void benchmark_directory(const char *path, benchmark_result_t *grand_total) {
 
 	if (dir_total.count > 0) {
 		printf("## Total for %s\n", path);
-		benchmark_print_result(dir_total);
+		benchmark_print_result(opt, effort, dir_total);
 	}
 }
 
 int main(int argc, char **argv) {
-	if (argc < 4) {
-		printf("Usage: qoipbench <iterations> <effort> <directory> [options]\n");
-		printf("Options:\n");
-		printf("    --nowarmup ... don't perform a warmup run\n");
-		printf("    --nopng ...... don't run png encode/decode\n");
-		printf("    --noverify ... don't verify qoip roundtrip\n");
-		printf("    --noencode ... don't run encoders\n");
-		printf("    --nodecode ... don't run decoders\n");
-		printf("    --norecurse .. don't descend into directories\n");
-		printf("    --onlytotals . don't print individual image results\n");
-		printf("<effort>: Which combinations to try. Either a comma-delimited\n");
-		printf("          list of user-defined options, or an integer from\n");
-		printf("          0 to 3 with an increasing number of trials\n");
-		printf("Examples\n");
-		printf("    qoipbench 10 0 images/textures/ 0\n");
-		printf("    qoipbench 1 0 images/textures/ 0 --nopng --nowarmup\n");
-		exit(1);
-	}
+	opt_t opt;
+	char effort_level[2];
 
-	for (int i = 4; i < argc; i++) {
-		if (strcmp(argv[i], "--nowarmup") == 0) { opt_nowarmup = 1; }
-		else if (strcmp(argv[i], "--nopng") == 0) { opt_nopng = 1; }
-		else if (strcmp(argv[i], "--noverify") == 0) { opt_noverify = 1; }
-		else if (strcmp(argv[i], "--noencode") == 0) { opt_noencode = 1; }
-		else if (strcmp(argv[i], "--nodecode") == 0) { opt_nodecode = 1; }
-		else if (strcmp(argv[i], "--norecurse") == 0) { opt_norecurse = 1; }
-		else if (strcmp(argv[i], "--onlytotals") == 0) { opt_onlytotals = 1; }
-		else { ERROR("Unknown option %s", argv[i]); }
-	}
+	/* Process args */
+	opt_init(&opt);
+	opt_process(&opt, argc, argv);
+	if(opt_dispatch(&opt))
+		return 1;
+	else if(argc==1)
+		optmode_help(&opt);
+	sprintf(effort_level, "%d", opt.effort);
 
-	opt_runs = atoi(argv[1]);
-	effort = argv[2];
-	if (opt_runs <= 0) {
-		ERROR("Invalid number of runs %d", opt_runs);
+	if(!opt.directory) {
+		printf("Pass directory to benchmark\n");
+		return 1;
 	}
 
 	benchmark_result_t grand_total = {0};
-	benchmark_directory(argv[3], &grand_total);
+	benchmark_directory(&opt, opt.custom?opt.custom:effort_level, opt.directory, &grand_total);
 
 	if (grand_total.count > 0) {
-		printf("# Grand total for %s\n", argv[3]);
-		benchmark_print_result(grand_total);
+		printf("# Grand total for %s\n", opt.directory);
+		benchmark_print_result(&opt, opt.custom?opt.custom:effort_level, grand_total);
 	}
 	else
-		printf("No images found in %s\n", argv[3]);
+		printf("No images found in %s\n", opt.directory);
 
 	return 0;
 }

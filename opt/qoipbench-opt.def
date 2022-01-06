@@ -1,0 +1,70 @@
+[
+	{
+		"tag": "directory",
+		"type": "string",
+		"description": "The directory to benchmark",
+	},
+	{
+		"tag": "custom",
+		"type": "string",
+		"description": "Define a custom set of combinations (comma-delimited)",
+	},
+	{
+		"tag": "effort",
+		"type": "int",
+		"description": "Combination preset 0-5, higher tries more combinations, default 1.",
+		"int": 1,
+		"min": 0,
+		"max": 5,
+	},
+	{
+		"tag": "iterations",
+		"type": "int",
+		"description": "Number of iterations to try, default 1.",
+		"int": 1,
+		"min": 0,
+		"max": 999,
+	},
+	{
+		"tag": "warmup",
+		"type": "flag",
+		"description": "Perform a warmup run (default true)",
+		"int": true
+	},
+	{
+		"tag": "png",
+		"type": "flag",
+		"description": "Run png encode/decode (default true)",
+		"int": true
+	},
+	{
+		"tag": "verify",
+		"type": "flag",
+		"description": "Verify QOIP roundtrip (default true)",
+		"int": true
+	},
+	{
+		"tag": "encode",
+		"type": "flag",
+		"description": "Run encoders (default true)",
+		"int": true
+	},
+	{
+		"tag": "decode",
+		"type": "flag",
+		"description": "Run decoders (default true)",
+		"int": true
+	},
+	{
+		"tag": "recurse",
+		"type": "flag",
+		"description": "Descend into directories (default true)",
+		"int": true
+	},
+	{
+		"tag": "onlytotals",
+		"type": "flag",
+		"description": "Only print directory totals (default true)",
+		"int": true
+	},
+]
