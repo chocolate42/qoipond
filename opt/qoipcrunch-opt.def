@@ -1,0 +1,31 @@
+[
+	{
+		"tag": "custom",
+		"type": "string",
+		"description": "Define a custom set of combinations (comma-delimited)",
+	},
+	{
+		"tag": "effort",
+		"type": "int",
+		"description": "Combination preset 0-5, higher tries more combinations, default 1.",
+		"int": 1,
+		"min": 0,
+		"max": 5,
+	},
+	{
+		"tag": "in",
+		"type": "data",
+		"description": "Input path",
+	},
+	{
+		"tag": "out",
+		"type": "stream",
+		"parameters": "wb",
+		"description": "Output path",
+	},
+	{
+		"tag": "-list",
+		"type": "mode",
+		"description": "List all known ops. id's can be used to build custom opstring's",
+	},
+]

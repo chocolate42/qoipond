@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-std=gnu99 -O3 -Wall -pedantic
+CFLAGS=-std=gnu99 -O3 -Wall -pedantic -Iopt
 LIBS=-lpng
 
 qoipbench:

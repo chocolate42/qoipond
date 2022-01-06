@@ -40,18 +40,19 @@ int optmode_list(opt_t *opt) {
 	return 0;
 }
 
-/* Detect RGB input and skip combinations with explicit alpha handling TODO */
 int main(int argc, char *argv[]) {
 	opt_t opt;
 	qoip_desc desc;
 	unsigned char *raw, *tmp, *scratch;
 	size_t tmp_len, cnt;
+	char effort_str[2];
 
 	/* Process args */
 	opt_init(&opt);
 	opt_process(&opt, argc, argv);
 	if(opt_dispatch(&opt))
 		return 1;
+	sprintf(effort_str, "%d", opt.effort);
 
 	if(opt.in==NULL) {
 		optmode_help(&opt);
@@ -60,6 +61,7 @@ int main(int argc, char *argv[]) {
 
 	/* Decode qoip to raw pixels */
 	if(qoip_read_header((u8*)opt.in, NULL, &desc)) {
+		printf("Failed to read header\n");
 		return 1;
 	}
 
@@ -71,7 +73,7 @@ int main(int argc, char *argv[]) {
 	scratch = malloc(qoip_maxsize(&desc));
 	assert(scratch);
 
-	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.effort, &cnt, scratch))
+	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch))
 		return 1;
 
 	if(opt.out) {
@@ -84,7 +86,8 @@ int main(int argc, char *argv[]) {
 		fclose(opt.out);
 	}
 
-	printf("Tried %"PRIu64" combinations, reduced to %f%% of input\n", cnt, (tmp_len*100.0)/opt.in_len);
+	printf("Tried %zu combinations, result size is %.2f%% of input%s\n", cnt, (tmp_len*100.0)/opt.in_len, (tmp_len<opt.in_len)?"":" (so not used)");
+
 	free(raw);
 	free(tmp);
 	free(scratch);
