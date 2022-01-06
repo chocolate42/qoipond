@@ -1,0 +1,25 @@
+[
+	{
+		"tag": "custom",
+		"type": "string",
+		"description": "Define a custom set of combinations (comma-delimited)",
+	},
+	{
+		"tag": "effort",
+		"type": "int",
+		"description": "Combination preset 0-5, higher tries more combinations, default 1.",
+		"int": 1,
+		"min": 0,
+		"max": 5,
+	},
+	{
+		"tag": "in",
+		"type": "string",
+		"description": "Input path",
+	},
+	{
+		"tag": "out",
+		"type": "string",
+		"description": "Output path",
+	},
+]

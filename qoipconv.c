@@ -35,8 +35,12 @@ SOFTWARE.
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#define QOIPCRUNCH_C
+#include "qoipcrunch.h"
 #define QOIP_C
 #include "qoip.h"
+#define OPT_C
+#include "qoipconv-opt.h"
 
 #include <stdio.h>
 
@@ -64,19 +68,21 @@ void *qoip_read(const char *filename, qoip_desc *desc, int channels);
 	#define QOIP_FREE(p)    free(p)
 #endif
 
-size_t qoip_write(const char *filename, const void *data, const qoip_desc *desc) {
+size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc *desc, char *effort) {
 	FILE *f;
 	size_t max_size, size;
-	void *encoded;
+	void *encoded, *scratch;
 
 	max_size = qoip_maxsize(desc);
 	encoded = QOIP_MALLOC(max_size);
+	scratch = QOIP_MALLOC(max_size);
 	if (
-		!encoded ||
-		qoip_encode(data, desc, encoded, &size, NULL) ||
+		!encoded || !scratch ||
+		qoipcrunch_encode(data, desc, encoded, &size, effort, NULL, scratch) ||
 		!(f = fopen(filename, "wb"))
 	) {
 		QOIP_FREE(encoded);
+		QOIP_FREE(scratch);
 		return 0;
 	}
 
@@ -84,6 +90,7 @@ size_t qoip_write(const char *filename, const void *data, const qoip_desc *desc)
 	fclose(f);
 
 	QOIP_FREE(encoded);
+	QOIP_FREE(scratch);
 	return size;
 }
 
@@ -131,20 +138,28 @@ void *qoip_read(const char *filename, qoip_desc *desc, int channels) {
 #define STR_ENDS_WITH(S, E) (strcmp(S + strlen(S) - (sizeof(E)-1), E) == 0)
 
 int main(int argc, char **argv) {
+	opt_t opt;
+	char effort_level[2];
 
-	if (argc < 3) {
-		printf("Usage: qoipconv <infile> <outfile>\n");
-		printf("Examples:\n");
-		printf("  qoipconv input.png output.qoip\n");
-		printf("  qoipconv input.qoip output.png\n");
-		return 1;;
+	/* Process args */
+	opt_init(&opt);
+	opt_process(&opt, argc, argv);
+	if(opt_dispatch(&opt))
+		return 1;
+	else if(argc==1)
+		optmode_help(&opt);
+	sprintf(effort_level, "%d", opt.effort);
+
+	if(!opt.in || !opt.out) {
+		printf("Input and output files need to be defined\n");
+		return 1;
 	}
 
 	void *pixels = NULL;
 	int w, h, channels;
-	if (STR_ENDS_WITH(argv[1], ".png")) {
-		if(!stbi_info(argv[1], &w, &h, &channels)) {
-			printf("Couldn't read header %s\n", argv[1]);
+	if (STR_ENDS_WITH(opt.in, ".png")) {
+		if(!stbi_info(opt.in, &w, &h, &channels)) {
+			printf("Couldn't read header %s\n", opt.in);
 			return 1;
 		}
 
@@ -153,36 +168,36 @@ int main(int argc, char **argv) {
 			channels = 4;
 		}
 
-		pixels = (void *)stbi_load(argv[1], &w, &h, NULL, channels);
+		pixels = (void *)stbi_load(opt.in, &w, &h, NULL, channels);
 	}
-	else if (STR_ENDS_WITH(argv[1], ".qoip")) {
+	else if (STR_ENDS_WITH(opt.in, ".qoip")) {
 		qoip_desc desc;
-		pixels = qoip_read(argv[1], &desc, 0);
+		pixels = qoip_read(opt.in, &desc, 0);
 		channels = desc.channels;
 		w = desc.width;
 		h = desc.height;
 	}
 
 	if (pixels == NULL) {
-		printf("Couldn't load/decode %s\n", argv[1]);
+		printf("Couldn't load/decode %s\n", opt.in);
 		exit(1);
 	}
 
 	int encoded = 0;
-	if (STR_ENDS_WITH(argv[2], ".png")) {
-		encoded = stbi_write_png(argv[2], w, h, channels, pixels, 0);
+	if (STR_ENDS_WITH(opt.out, ".png")) {
+		encoded = stbi_write_png(opt.out, w, h, channels, pixels, 0);
 	}
-	else if (STR_ENDS_WITH(argv[2], ".qoip")) {
-		encoded = qoip_write(argv[2], pixels, &(qoip_desc){
+	else if (STR_ENDS_WITH(opt.out, ".qoip")) {
+		encoded = qoipcrunch_write(opt.out, pixels, &(qoip_desc){
 			.width = w,
 			.height = h,
 			.channels = channels,
 			.colorspace = QOIP_SRGB
-		});
+		}, (opt.custom?opt.custom:effort_level));
 	}
 
 	if (!encoded) {
-		printf("Couldn't write/encode %s\n", argv[2]);
+		printf("Couldn't write/encode %s\n", opt.out);
 		return 1;
 	}
 
