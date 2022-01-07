@@ -174,9 +174,9 @@ typedef union {
 
 /* All working variables needed by a single encode/decode run */
 typedef struct {
-	size_t p, px_len, px_pos;
+	size_t p, px_pos, px_w, px_h, width, height;
 	int channels, hash, run, run1_len, run2_len, index1_maxval, stride;
-	unsigned char *out;
+	unsigned char *out, upcache[8192*3];
 	const unsigned char *in;
 	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
 	i8 vr, vg, vb, va;/*Difference from previous */
@@ -577,10 +577,10 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 	else {
 		qoip_encode_run(q);
 		/* generate variables that may be needed by ops */
-		if (q->px_pos >= q->stride) {
-			q->px_ref.rgba.r = (q->px_prev.rgba.r + q->in[q->px_pos - q->stride + 0] + 1) >> 1;
-			q->px_ref.rgba.g = (q->px_prev.rgba.g + q->in[q->px_pos - q->stride + 1] + 1) >> 1;
-			q->px_ref.rgba.b = (q->px_prev.rgba.b + q->in[q->px_pos - q->stride + 2] + 1) >> 1;
+		if (q->px_w<8192) {
+			q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
+			q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
+			q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
 		}
 		else
 			q->px_ref.v = q->px_prev.v;
@@ -614,6 +614,11 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 				q->out[q->p++] = q->px.rgba.a;
 			}
 		}
+	}
+	if(q->px_w<8192) {
+		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
+		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
+		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
 	}
 	q->index2[q->hash] = q->px;
 }
@@ -654,9 +659,22 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 
 	q->px.v = 0;
 	q->px.rgba.a = 255;
-	q->px_len = desc->width * desc->height * desc->channels;
+	q->width = desc->width;
+	q->height = desc->height;
 	q->channels = desc->channels;
 	q->stride = desc->width * desc->channels;
+	q->upcache[0]=0;
+	q->upcache[1]=0;
+	q->upcache[2]=0;
+	if(desc->channels==4) {
+		for(i=0;i<(desc->width<8192?desc->width-1:8191);++i) {/* Prefill upcache to remove branch */
+			q->upcache[((i+1)*3)+0]=q->in[(i*desc->channels)+0];
+			q->upcache[((i+1)*3)+1]=q->in[(i*desc->channels)+1];
+			q->upcache[((i+1)*3)+2]=q->in[(i*desc->channels)+2];
+		}
+	}
+	else
+		memcpy(q->upcache+3, q->in, (desc->width<8192?desc->width-1:8191)*3);
 
 	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
 		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].enc)
@@ -665,20 +683,27 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 
 	/* Sort ops into order they should be tested on encode */
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set);
+	q->px_pos = 0;
 	if(q->channels==4) {
-		for (q->px_pos = 0; q->px_pos < q->px_len; q->px_pos += 4) {
-			q->px_prev.v = q->px.v;
-			q->px = *(qoip_rgba_t *)(q->in + q->px_pos);
-			qoip_encode_inner(q, ops, op_cnt);
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				q->px_prev.v = q->px.v;
+				q->px = *(qoip_rgba_t *)(q->in + q->px_pos);
+				qoip_encode_inner(q, ops, op_cnt);
+				q->px_pos +=4;
+			}
 		}
 	}
 	else {
-		for (q->px_pos = 0; q->px_pos < q->px_len; q->px_pos += 3) {
-			q->px_prev.v = q->px.v;
-			q->px.rgba.r = q->in[q->px_pos + 0];
-			q->px.rgba.g = q->in[q->px_pos + 1];
-			q->px.rgba.b = q->in[q->px_pos + 2];
-			qoip_encode_inner(q, ops, op_cnt);
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				q->px_prev.v = q->px.v;
+				q->px.rgba.r = q->in[q->px_pos + 0];
+				q->px.rgba.g = q->in[q->px_pos + 1];
+				q->px.rgba.b = q->in[q->px_pos + 2];
+				qoip_encode_inner(q, ops, op_cnt);
+				q->px_pos +=3;
+			}
 		}
 	}
 	qoip_encode_run(q);/* Cap off ending run if present*/
@@ -693,10 +718,10 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 		--q->run;
 	else if (q->p < data_len) {
 		q->px_prev.v = q->px.v;
-		if (q->px_pos >= q->stride) {
-			q->px_ref.rgba.r = (q->px.rgba.r + q->out[q->px_pos - q->stride + 0] + 1) >> 1;
-			q->px_ref.rgba.g = (q->px.rgba.g + q->out[q->px_pos - q->stride + 1] + 1) >> 1;
-			q->px_ref.rgba.b = (q->px.rgba.b + q->out[q->px_pos - q->stride + 2] + 1) >> 1;
+		if (q->px_pos >= q->stride && q->px_w<8192) {
+			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
+			q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
+			q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
 		}
 		else
 			q->px_ref.v = q->px_prev.v;
@@ -730,6 +755,11 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 		q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px;
 		q->index2[QOIP_COLOR_HASH(q->px) & 255] = q->px;
 	}
+	if(q->px_w<8192) {
+		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
+		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
+		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
+	}
 }
 
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out) {
@@ -741,11 +771,10 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 
 	q->in = (const unsigned char *)data;
 	q->out = (unsigned char *)out;
-	q->channels = channels==0 ? desc->channels : channels;
 
 	if (
 		data == NULL || desc == NULL ||
-		(q->channels != 3 && q->channels != 4) ||
+		(channels != 0 && channels != 3 && channels != 4) ||
 		data_len < QOIP_FILE_HEADER_SIZE
 	)
 		return qoip_ret(1, stderr, "qoip_decode: Bad arguments");
@@ -759,30 +788,38 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
 		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 
+	q->width = desc->width;
+	q->height = desc->height;
+	q->channels = channels==0 ? desc->channels : channels;
 	q->stride = desc->width * q->channels;
-	q->px_len = desc->width * desc->height * q->channels;
 	q->px.v = 0;
 	q->px.rgba.a = 255;
 
-	/* Check for fastpath implementation */
-	for(i=0;i<qoip_fastpath_cnt;++i) {
+	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
 		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
 			return qoip_fastpath[i].dec(q, data_len);
 	}
 
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
+	q->px_pos = 0;
 	if(q->channels==4) {
-		for (q->px_pos = 0; q->px_pos < q->px_len; q->px_pos += 4) {
-			qoip_decode_inner(q, data_len, ops, op_cnt);
-			*(qoip_rgba_t*)(q->out + q->px_pos) = q->px;
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				qoip_decode_inner(q, data_len, ops, op_cnt);
+				*(qoip_rgba_t*)(q->out + q->px_pos) = q->px;
+				q->px_pos += 4;
+			}
 		}
 	}
 	else {
-		for (q->px_pos = 0; q->px_pos < q->px_len; q->px_pos += 3) {
-			qoip_decode_inner(q, data_len, ops, op_cnt);
-			q->out[q->px_pos + 0] = q->px.rgba.r;
-			q->out[q->px_pos + 1] = q->px.rgba.g;
-			q->out[q->px_pos + 2] = q->px.rgba.b;
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				qoip_decode_inner(q, data_len, ops, op_cnt);
+				q->out[q->px_pos + 0] = q->px.rgba.r;
+				q->out[q->px_pos + 1] = q->px.rgba.g;
+				q->out[q->px_pos + 2] = q->px.rgba.b;
+				q->px_pos += 3;
+			}
 		}
 	}
 	return 0;
