@@ -5,7 +5,7 @@
 * Footer needs to be written by the encode functions
 */
 
-/* deltax */
+/* deltax *//*
 enum{DELTAX_OP_LUMA1=0x00, DELTAX_OP_LUMA2=0x80, DELTAX_OP_INDEX5=0xc0, DELTAX_OP_LUMA3=0xe0, DELTAX_OP_LUMA3A=0xe8, DELTAX_OP_INDEX8=0xf0, DELTAX_OP_RGB=0xf1, DELTAX_OP_RGBA=0xf2, DELTAX_OP_RUN2=0xf3, DELTAX_OP_RUN1=0xf4};
 
 int qoip_encode_deltax(qoip_working_t *q, size_t *out_len) {
@@ -16,7 +16,7 @@ int qoip_encode_deltax(qoip_working_t *q, size_t *out_len) {
 			q->px = *(qoip_rgba_t *)(q->in + px_pos);
 
 			if (q->px.v == q->px_prev.v) {
-				++q->run;/* Accumulate as much RLE as there is */
+				++q->run;
 				continue;
 			}
 			qoip_encode_run(q);
@@ -117,7 +117,7 @@ int qoip_encode_deltax(qoip_working_t *q, size_t *out_len) {
 			q->px.rgba.b = q->in[px_pos + 2];
 
 			if (q->px.v == q->px_prev.v) {
-				++q->run;/* Accumulate as much RLE as there is */
+				++q->run;
 				continue;
 			}
 			qoip_encode_run(q);
@@ -276,9 +276,9 @@ int qoip_decode_deltax(qoip_working_t *q, size_t data_len) {
 		}
 	}
 	return 0;
-}
+}*/
 
-/*idelta*/
+/*idelta*//*
 enum{IDELTA_OP_INDEX7=0x00, IDELTA_OP_LUMA2=0x80, IDELTA_OP_DELTA=0xc0, IDELTA_OP_A=0xe0, IDELTA_OP_INDEX8=0xe1, IDELTA_OP_RGB=0xe2, IDELTA_OP_RGBA=0xe3, IDELTA_OP_RUN2=0xe4, IDELTA_OP_RUN1=0xe5};
 
 int qoip_encode_idelta(qoip_working_t *q, size_t *out_len) {
@@ -289,7 +289,7 @@ int qoip_encode_idelta(qoip_working_t *q, size_t *out_len) {
 			q->px = *(qoip_rgba_t *)(q->in + px_pos);
 
 			if (q->px.v == q->px_prev.v) {
-				++q->run;/* Accumulate as much RLE as there is */
+				++q->run;
 				continue;
 			}
 			qoip_encode_run(q);
@@ -394,7 +394,7 @@ int qoip_encode_idelta(qoip_working_t *q, size_t *out_len) {
 			q->px.rgba.b = q->in[px_pos + 2];
 
 			if (q->px.v == q->px_prev.v) {
-				++q->run;/* Accumulate as much RLE as there is */
+				++q->run;
 				continue;
 			}
 			qoip_encode_run(q);
@@ -572,9 +572,9 @@ int qoip_decode_idelta(qoip_working_t *q, size_t data_len) {
 		}
 	}
 	return 0;
-}
+}*/
 
-/* propc */
+/* propc *//*
 enum{PROPC_OP_DIFF=0x00, PROPC_OP_LUMA=0x40, PROPC_OP_RGB3=0x80, PROPC_OP_INDEX5=0xc0, PROPC_OP_A=0xe0, PROPC_OP_RGB=0xe1, PROPC_OP_RGBA=0xe2, PROPC_OP_RUN2=0xe3, PROPC_OP_RUN1=0xe4};
 
 int qoip_encode_propc(qoip_working_t *q, size_t *out_len) {
@@ -585,7 +585,7 @@ int qoip_encode_propc(qoip_working_t *q, size_t *out_len) {
 			q->px = *(qoip_rgba_t *)(q->in + px_pos);
 
 			if (q->px.v == q->px_prev.v) {
-				++q->run;/* Accumulate as much RLE as there is */
+				++q->run;
 				continue;
 			}
 			qoip_encode_run(q);
@@ -655,7 +655,7 @@ int qoip_encode_propc(qoip_working_t *q, size_t *out_len) {
 			q->px.rgba.b = q->in[px_pos + 2];
 
 			if (q->px.v == q->px_prev.v) {
-				++q->run;/* Accumulate as much RLE as there is */
+				++q->run;
 				continue;
 			}
 			qoip_encode_run(q);
@@ -787,4 +787,4 @@ int qoip_decode_propc(qoip_working_t *q, size_t data_len) {
 		}
 	}
 	return 0;
-}
+}*/
