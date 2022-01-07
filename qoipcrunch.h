@@ -71,8 +71,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	char **list = isrgb?qoipcrunch_rgb:qoipcrunch_rgba;
 	int list_cnt;
 
-	int rgb_levels[]  = {1, 2, 6, 10, 15,  qoipcrunch_rgb_cnt};
-	int rgba_levels[] = {1, 2, 6, 10, 15, qoipcrunch_rgba_cnt};
+	int rgb_levels[]  = {1, 2, 4, 6, 8,  qoipcrunch_rgb_cnt};
+	int rgba_levels[] = {1, 2, 4, 6, 8, qoipcrunch_rgba_cnt};
 
 	currbest_len = qoip_maxsize(desc);
 
