@@ -39,61 +39,45 @@ static void qoip_dec_index8(qoip_working_t *q) {
 static int qoip_enc_delta(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
-		q->vr > -2 && q->vr < 2 &&
-		q->vg > -2 && q->vg < 2 &&
-		q->vb > -2 && q->vb < 2
+		q->avg_r > -2 && q->avg_r < 2 &&
+		q->avg_g > -2 && q->avg_g < 2 &&
+		q->avg_b > -2 && q->avg_b < 2
 	) {
-		q->out[q->p++] = opcode | (((q->vb + 1) * 9) + ((q->vg + 1) * 3) + (q->vr + 1));
+		q->out[q->p++] = opcode | (((q->avg_b + 1) * 9) + ((q->avg_g + 1) * 3) + (q->avg_r + 1));
 		return 1;
 	}
 	else if (
-		q->va == 0 &&
-		((q->vr<0?-q->vr:q->vr)+(q->vg<0?-q->vg:q->vg)+(q->vb<0?-q->vb:q->vb))==2
+		q->va == 0 && q->avg_r == 0 && q->avg_b == 0 &&
+		q->avg_g > -5 && q->avg_g < 4
 	) {
-		if(q->vr==2)
-			q->out[q->p++] = opcode | 13;
-		else if(q->vr==-2)
-			q->out[q->p++] = opcode | 27;
-		else if(q->vg==2)
-			q->out[q->p++] = opcode | 28;
-		else if(q->vg==-2)
-			q->out[q->p++] = opcode | 29;
-		else if(q->vb==2)
-			q->out[q->p++] = opcode | 30;
-		else
-			q->out[q->p++] = opcode | 31;
+		if(q->avg_g < 0 ) {
+			q->out[q->p++] = opcode | (31 + q->avg_g);
+		}
+		else {
+			q->out[q->p++] = opcode | (28 + q->avg_g);
+		}
 		return 1;
 	}
 	return 0;
 }
 static void qoip_dec_delta(qoip_working_t *q) {
 	int b1=q->in[q->p++]&31;
-	switch(b1){
-		case 13:
-			q->px.rgba.r = q->px_prev.rgba.r + 2;
-			break;
-		case 27:
-			q->px.rgba.r = q->px_prev.rgba.r - 2;
-			break;
-		case 28:
-			q->px.rgba.g = q->px_prev.rgba.g + 2;
-			break;
-		case 29:
-			q->px.rgba.g = q->px_prev.rgba.g - 2;
-			break;
-		case 30:
-			q->px.rgba.b = q->px_prev.rgba.b + 2;
-			break;
-		case 31:
-			q->px.rgba.b = q->px_prev.rgba.b - 2;
-			break;
-		default:
-			q->px.rgba.r = q->px_prev.rgba.r + ((b1 % 3) - 1);
-			b1/=3;
-			q->px.rgba.g = q->px_prev.rgba.g + ((b1 % 3) - 1);
-			b1/=3;
-			q->px.rgba.b = q->px_prev.rgba.b + ((b1 % 3) - 1);
-			break;
+	if(b1<27) {
+		q->px.rgba.r = q->px_ref.rgba.r + ((b1 % 3) - 1);
+		b1/=3;
+		q->px.rgba.g = q->px_ref.rgba.g + ((b1 % 3) - 1);
+		b1/=3;
+		q->px.rgba.b = q->px_ref.rgba.b + ((b1 % 3) - 1);
+	}
+	else if(b1<30) {//27..29 -4..-2
+		q->px.rgba.r = q->px_ref.rgba.r;
+		q->px.rgba.g = q->px_ref.rgba.g + (b1 - 31);
+		q->px.rgba.b = q->px_ref.rgba.b;
+	}
+	else {//30..31
+		q->px.rgba.r = q->px_ref.rgba.r;
+		q->px.rgba.g = q->px_ref.rgba.g + (b1 - 28);
+		q->px.rgba.b = q->px_ref.rgba.b;
 	}
 }
 
@@ -291,21 +275,21 @@ static void qoip_dec_luma3_787(qoip_working_t *q) {
 static int qoip_enc_deltaa(qoip_working_t *q, u8 opcode) {
 	if (
 		(q->va == -1 || q->va == 1) &&
-		q->vr > -2 && q->vr < 2 &&
-		q->vg > -2 && q->vg < 2 &&
-		q->vb > -2 && q->vb < 2
+		q->avg_r > -2 && q->avg_r < 2 &&
+		q->avg_g > -2 && q->avg_g < 2 &&
+		q->avg_b > -2 && q->avg_b < 2
 	) {
-		q->out[q->p++] = opcode | (q->va==1?32:0) | (((q->vb+1)*9)+((q->vg+1)*3)+(q->vr+1));
+		q->out[q->p++] = opcode | (q->va==1?32:0) | (((q->avg_b+1)*9)+((q->avg_g+1)*3)+(q->avg_r+1));
 		return 1;
 	}
-	else if (/*encode small changes in a, -6..-2, 2..6*/
+	else if (/*encode small changes in a, -5..4*/
 		q->vr == 0 && q->vg == 0 && q->vb == 0 &&
-		q->va > -7 && q->va < 7
+		q->va > -6 && q->va < 5
 	) {
-		if(q->va>0)
-			q->out[q->p++] = opcode | 32 | (25 + q->va);
+		if(q->va>=0)
+			q->out[q->p++] = opcode | 32 | (27 + q->va);
 		else
-			q->out[q->p++] = opcode |      (25 - q->va);
+			q->out[q->p++] = opcode |      (32 + q->va);
 		return 1;
 	}
 	return 0;
@@ -319,18 +303,18 @@ static void qoip_dec_deltaa(qoip_working_t *q) {
 		case 30:
 		case 31:
 			if(b1&32)
-				q->px.rgba.a += ((b1&31)-25);
+				q->px.rgba.a += ((b1&31)-27);
 			else
-				q->px.rgba.a -= ((b1&31)-25);
+				q->px.rgba.a += ((b1&31)-32);
 			break;
 		default:
 			q->px.rgba.a += (b1 & 32) ? 1 : -1;
 			b1 &= 31;
-			q->px.rgba.r = q->px_prev.rgba.r + ((b1 % 3) - 1);
+			q->px.rgba.r = q->px_ref.rgba.r + ((b1 % 3) - 1);
 			b1/=3;
-			q->px.rgba.g = q->px_prev.rgba.g + ((b1 % 3) - 1);
+			q->px.rgba.g = q->px_ref.rgba.g + ((b1 % 3) - 1);
 			b1/=3;
-			q->px.rgba.b = q->px_prev.rgba.b + ((b1 % 3) - 1);
+			q->px.rgba.b = q->px_ref.rgba.b + ((b1 % 3) - 1);
 			break;
 	}
 }
