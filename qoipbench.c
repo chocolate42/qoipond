@@ -357,14 +357,14 @@ void benchmark_print_result(opt_t *opt, char *effort, benchmark_result_t res) {
 		);
 	}
 	printf(
-			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: qoip(%s)\n",
+			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: qoip(%s).threads(%d)\n",
 		(double)res.qoip.decode_time/1000000.0,
 		(double)res.qoip.encode_time/1000000.0,
 		(res.qoip.decode_time > 0 ? px / ((double)res.qoip.decode_time/1000.0) : 0),
 		(res.qoip.encode_time > 0 ? px / ((double)res.qoip.encode_time/1000.0) : 0),
 		res.qoip.size/1024,
 		((double)res.qoip.size/(double)res.raw_size) * 100.0,
-		effort
+		effort, opt->threads
 	);
 	printf("\n");
 }
@@ -409,11 +409,11 @@ benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 	desc_raw.colorspace = QOIP_SRGB;
 	size_t qoip_max_size = qoip_maxsize(&desc_raw);
 	void *encoded_qoip = malloc(qoip_max_size);
-	void *scratch = malloc(qoip_max_size);
+	void *scratch = malloc(qoip_max_size*opt->threads);
 	if (!encoded_qoip) {
 		ERROR("Error, malloc failed %s", path);
 	}
-	if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &encoded_qoip_size, effort, NULL, scratch)) {
+	if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &encoded_qoip_size, effort, NULL, scratch, opt->threads)) {
 		ERROR("Error, qoip_encode failed %s", path);
 	}
 	if (!pixels || !encoded_qoip || !encoded_png) {
@@ -494,7 +494,7 @@ benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 
 		BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.qoip.encode_time, {
 			size_t enc_size;
-			if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL, scratch)) {
+			if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL, scratch, opt->threads)) {
 				ERROR("Error, qoip_encode failed %s", path);
 			}
 			res.qoip.size = enc_size;

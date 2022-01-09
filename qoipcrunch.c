@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
 	scratch = malloc(qoip_maxsize(&desc));
 	assert(scratch);
 
-	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch))
+	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads))
 		return 1;
 
 	if(opt.out) {

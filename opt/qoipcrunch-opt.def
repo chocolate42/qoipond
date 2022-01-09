@@ -13,6 +13,14 @@
 		"max": 5,
 	},
 	{
+		"tag": "threads",
+		"type": "int",
+		"description": "Number of threads to use. Default 1",
+		"int": 1,
+		"min": 1,
+		"max": 64,
+	},
+	{
 		"tag": "in",
 		"type": "data",
 		"description": "Input path",

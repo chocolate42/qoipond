@@ -68,7 +68,7 @@ void *qoip_read(const char *filename, qoip_desc *desc, int channels);
 	#define QOIP_FREE(p)    free(p)
 #endif
 
-size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc *desc, char *effort) {
+size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc *desc, char *effort, int threads) {
 	FILE *f;
 	size_t max_size, size;
 	void *encoded, *scratch;
@@ -78,7 +78,7 @@ size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc 
 	scratch = QOIP_MALLOC(max_size);
 	if (
 		!encoded || !scratch ||
-		qoipcrunch_encode(data, desc, encoded, &size, effort, NULL, scratch) ||
+		qoipcrunch_encode(data, desc, encoded, &size, effort, NULL, scratch, threads) ||
 		!(f = fopen(filename, "wb"))
 	) {
 		QOIP_FREE(encoded);
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
 			.height = h,
 			.channels = channels,
 			.colorspace = QOIP_SRGB
-		}, (opt.custom?opt.custom:effort_level));
+		}, (opt.custom?opt.custom:effort_level), opt.threads);
 	}
 
 	if (!encoded) {

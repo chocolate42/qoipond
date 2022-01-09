@@ -25,6 +25,7 @@ SOFTWARE.
 #define QOIPCRUNCH_H
 #include "qoip.h"
 #include "qoipcrunch-list.h"
+#include <assert.h>
 #include <inttypes.h>
 #include <stddef.h>
 
@@ -32,7 +33,7 @@ SOFTWARE.
 extern "C" {
 #endif
 
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp);
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *scratch, int threads);
 
 #ifdef __cplusplus
 }
@@ -40,6 +41,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 #endif /* QOIPCRUNCH_H */
 
 #ifdef QOIPCRUNCH_C
+#include <omp.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -58,28 +60,34 @@ static void qoipcrunch_update_stats(size_t *currbest_len, char *currbest_str, si
 	}
 }
 
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp) {
+/* Working memory for threads */
+typedef struct {
+	u8 *curr;/*Encoding out*/
+	int best/*best index tested*/, curr_index;/*Current index*/
+	size_t best_len/*Length of best tested*/, curr_len;/*Current length*/
+} tm_t;
+
+#define QOIP_MAX_THREADS 64
+
+/* Scratch is assumed big enough to house all working memory encodings, aka
+threads * qoip_maxsize(desc)
+*/
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp, int threads) {
 	char currbest_str[256], *next_opstring;
-	int j;
+	int currbest = -1, j;
 	size_t currbest_len, w_len;
 	size_t cnt = 0;
 	int level = -1;
-	int isrgb = desc->channels==3 ? 1 : 0;
-	void *working = tmp?tmp:out;
-	size_t *working_len = tmp?&w_len:out_len;
-
-	char **list = isrgb?qoipcrunch_rgb:qoipcrunch_rgba;
-	int list_cnt;
-
-	int rgb_levels[]  = {1, 2, 4, 6, 8,  qoipcrunch_rgb_cnt};
-	int rgba_levels[] = {1, 2, 4, 6, 8, qoipcrunch_rgba_cnt};
+	u8 *scratch = (u8*)tmp;
+	void *working = scratch?scratch:out;
+	size_t *working_len = scratch?&w_len:out_len;
+	int list_cnt, thread_cnt;
+	int levels[]  = {1, 2, 4, 8, 16, 32, 64};
+	tm_t tm[QOIP_MAX_THREADS] = {0};
 
 	currbest_len = qoip_maxsize(desc);
 
-	if(!effort)
-		effort="";
-
-	if(     strcmp(effort, "0")==0)
+	if(     strcmp(effort, "0")==0 || !effort)
 		level=0;
 	else if(strcmp(effort, "1")==0)
 		level=1;
@@ -91,6 +99,10 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		level=4;
 	else if(strcmp(effort, "5")==0)
 		level=5;
+	else if(strcmp(effort, "6")==0)
+		level=6;
+
+	assert(scratch);
 
 	if(level==-1) {/* Try every combination in the user-defined list */
 		next_opstring = effort-1;
@@ -98,36 +110,66 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 			++next_opstring;
 			if(qoip_encode(data, desc, working, working_len, next_opstring))
 				return 1;
-			if(tmp && currbest_len>*working_len) {/*scratch space used, copy best to out*/
-				memcpy(out, tmp, *working_len);
+			if(currbest_len>*working_len) {/*copy best to out*/
+				memcpy(out, scratch, *working_len);
 				*out_len = *working_len;
 			}
+			++cnt;
 			qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, next_opstring);
 		} while( (next_opstring=strchr(next_opstring, ',')) );
-		++cnt;
 		if(count)
 			*count=cnt;
-		if(!tmp && *working_len!=currbest_len)/*scratch space not used, redo best combo*/
-			qoip_encode(data, desc, out, working_len, currbest_str);
 		return 0;
 	}
 
-	list_cnt = isrgb ? rgb_levels[level] : rgba_levels[level];
-	for(j=0;j<list_cnt;++j) {
-		if(qoip_encode(data, desc, working, working_len, list[j]))
-			return 1;
-		if(tmp && currbest_len>*working_len) {
-			memcpy(out, tmp, *working_len);
-			*out_len = *working_len;
-		}
-		++cnt;
-		qoipcrunch_update_stats(&currbest_len, currbest_str, working_len, list[j]);
+	list_cnt = 1 << level;
+
+	/*Dynamic threads currently disabled by option parsing as it requires scratch
+	to be dynamically allocated, which we are not doing. Fix or remove TODO */
+	thread_cnt = threads==0 ? omp_get_num_procs() : threads;
+	thread_cnt = thread_cnt>QOIP_MAX_THREADS ? QOIP_MAX_THREADS : thread_cnt;
+	thread_cnt = list_cnt<thread_cnt ? list_cnt : thread_cnt;
+	omp_set_num_threads(thread_cnt);
+
+	#pragma omp parallel
+	{/*init working memory*/
+		tm[omp_get_thread_num()].best = -1;
+		tm[omp_get_thread_num()].best_len = currbest_len;
+		tm[omp_get_thread_num()].curr = scratch + (omp_get_thread_num()*currbest_len);
 	}
 
+	#pragma omp parallel for
+	for(j=0;j<list_cnt;++j) {/*try combinations*/
+		qoip_encode(data, desc, tm[omp_get_thread_num()].curr, &tm[omp_get_thread_num()].curr_len, qoipcrunch_unified[j]);
+		tm[omp_get_thread_num()].curr_index=j;
+		if(tm[omp_get_thread_num()].best_len > tm[omp_get_thread_num()].curr_len) {
+			tm[omp_get_thread_num()].best_len = tm[omp_get_thread_num()].curr_len;
+			tm[omp_get_thread_num()].best = j;
+		}
+	}
+
+	for(j=0;j<thread_cnt;++j) {/*aggregate*/
+		if(tm[j].best_len < currbest_len) {
+			currbest_len = tm[j].best_len;
+			currbest = tm[j].best;
+		}
+	}
+	if(currbest==-1)
+		return 1;
+
+	/*Copy encoding to output*/
+	for(j=0;j<thread_cnt;++j) {/*If it's in working memory copy it*/
+		if(tm[j].curr_index == currbest) {
+			memcpy(out, tm[j].curr, tm[j].curr_len);
+			*out_len = tm[j].curr_len;
+			break;
+		}
+	}
+	if(j == thread_cnt)/*Otherwise redo encode*/
+		qoip_encode(data, desc, out, out_len, qoipcrunch_unified[currbest]);
+
 	if(count)
-		*count=cnt;
-	if(!tmp && *working_len!=currbest_len)
-		qoip_encode(data, desc, out, working_len, currbest_str);
+		*count=list_cnt;
 	return 0;
 }
 

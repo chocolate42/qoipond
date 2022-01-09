@@ -13,6 +13,7 @@ typedef struct opt{
 	char *in;
 	char *custom;
 	int effort;
+	int threads;
 	int _mode;
 } opt_t;
 
@@ -65,6 +66,7 @@ static inline int opt_fread_fully(char **dest, size_t *dest_len, char *path){
 int opt_init(opt_t *opt){
 	opt->_mode=2;
 	opt->effort=1;
+	opt->threads=1;
 	opt->custom=NULL;
 	opt->in=NULL;
 	opt->in_len=0;
@@ -102,6 +104,18 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			else if(opt->effort>5){
 				fprintf(stderr, "Error, -effort value must be at most 5\n");
+				return 1;
+			}
+			++loc;
+		}
+		else if(strcmp("-threads", argv[loc])==0){
+			opt->threads=atoi(argv[loc+1]);
+			if(opt->threads<1){
+				fprintf(stderr, "Error, -threads value must be at least 1\n");
+				return 1;
+			}
+			else if(opt->threads>64){
+				fprintf(stderr, "Error, -threads value must be at most 64\n");
 				return 1;
 			}
 			++loc;
@@ -176,6 +190,8 @@ int optmode_help(){
 	printf("    Define a custom set of combinations (comma-delimited)\n\n");
 	printf(" -effort input\n");
 	printf("    Combination preset 0-5, higher tries more combinations, default 1.\n\n");
+	printf(" -threads input\n");
+	printf("    Number of threads to use. Default 1\n\n");
 
 	return 0;
 }
