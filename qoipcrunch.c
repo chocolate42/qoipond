@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 	qoip_decode(opt.in, opt.in_len, &desc, desc.channels, raw);
 	tmp = malloc(qoip_maxsize(&desc));
 	assert(tmp);
-	scratch = malloc(qoip_maxsize(&desc));
+	scratch = malloc(qoip_maxsize(&desc)*opt.threads);
 	assert(scratch);
 
 	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads))

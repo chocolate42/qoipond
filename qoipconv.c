@@ -75,7 +75,7 @@ size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc 
 
 	max_size = qoip_maxsize(desc);
 	encoded = QOIP_MALLOC(max_size);
-	scratch = QOIP_MALLOC(max_size);
+	scratch = QOIP_MALLOC(max_size*threads);
 	if (
 		!encoded || !scratch ||
 		qoipcrunch_encode(data, desc, encoded, &size, effort, NULL, scratch, threads) ||

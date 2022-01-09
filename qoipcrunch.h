@@ -82,7 +82,6 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	void *working = scratch?scratch:out;
 	size_t *working_len = scratch?&w_len:out_len;
 	int list_cnt, thread_cnt;
-	int levels[]  = {1, 2, 4, 8, 16, 32, 64};
 	tm_t tm[QOIP_MAX_THREADS] = {0};
 
 	currbest_len = qoip_maxsize(desc);
