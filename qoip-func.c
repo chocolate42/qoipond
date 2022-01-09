@@ -55,8 +55,8 @@ static int qoip_sim_delta(qoip_working_t *q) {
 	)
 		return 1;
 	else if (
-		q->va == 0 && q->avg_r == 0 && q->avg_b == 0 &&
-		q->avg_g > -5 && q->avg_g < 4
+		q->vr == 0 && q->vg == 0 && q->vb == 0 &&
+		q->va > -3 && q->va < 3
 	)
 		return 1;
 	return 0;
@@ -72,15 +72,10 @@ static int qoip_enc_delta(qoip_working_t *q, u8 opcode) {
 		return 1;
 	}
 	else if (
-		q->va == 0 && q->avg_r == 0 && q->avg_b == 0 &&
-		q->avg_g > -5 && q->avg_g < 4
+		q->vr == 0 && q->vg == 0 && q->vb == 0 &&
+		q->va > -3 && q->va < 3
 	) {
-		if(q->avg_g < 0 ) {
-			q->out[q->p++] = opcode | (31 + q->avg_g);
-		}
-		else {
-			q->out[q->p++] = opcode | (28 + q->avg_g);
-		}
+		q->out[q->p++] = opcode | (29 + q->va);
 		return 1;
 	}
 	return 0;
@@ -94,16 +89,8 @@ static void qoip_dec_delta(qoip_working_t *q) {
 		b1/=3;
 		q->px.rgba.b = q->px_ref.rgba.b + ((b1 % 3) - 1);
 	}
-	else if(b1<30) {//27..29 -4..-2
-		q->px.rgba.r = q->px_ref.rgba.r;
-		q->px.rgba.g = q->px_ref.rgba.g + (b1 - 31);
-		q->px.rgba.b = q->px_ref.rgba.b;
-	}
-	else {//30..31
-		q->px.rgba.r = q->px_ref.rgba.r;
-		q->px.rgba.g = q->px_ref.rgba.g + (b1 - 28);
-		q->px.rgba.b = q->px_ref.rgba.b;
-	}
+	else
+		q->px.rgba.a += (b1 - 29);
 }
 
 static int qoip_sim_diff1_222(qoip_working_t *q) {
