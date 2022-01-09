@@ -7,10 +7,10 @@
 	{
 		"tag": "effort",
 		"type": "int",
-		"description": "Combination preset 0-5, higher tries more combinations, default 1.",
+		"description": "Combination preset 0-6, higher tries more combinations, default 1.",
 		"int": 1,
 		"min": 0,
-		"max": 5,
+		"max": 6,
 	},
 	{
 		"tag": "threads",

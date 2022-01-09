@@ -77,12 +77,22 @@ qoip_footer {
 - Multiple 1 byte index encodings cannot be used simultaneously
 
 ## Code overview
-- qoip.h - Main header containing the main QOIP functions including the generic path implementation
-- qoipcrunch.h - Contains crunch function that tries many combinations, included by anything that wants to crunch
+
+### Main Library
+
+- qoip.h - Main QOIP functions including the generic path implementations of encode/decode
+- qoip-fast.c - Fastpath implementations for commonly used opcode combinations. The generic encode/decode in qoip.h uses a matching fastpath if available instead of the generic path
+- qoip-func.c - Encode/decode functions for opcodes used by the generic path. Included by the QOIP_C implementation only, split from qoip.h to make it less unwieldy
+
+### Crunch Library
+
+- qoipcrunch.h - Crunch function wrapping qoip_encode, automating trying many combinations. Included by anything that wants to crunch
+- qoipcrunch-list.h - A list of combinations tried by qoipcrunch_encode depending on effort level (higher effort levels try more combinations)
+
+### Tools
+
 - qoipbench.c - Commandline benchmark comparing QOIP, PNG and STBI formats
 - qoipconv.c - Commandline converter to/from QOIP format
 - qoipcrunch.c - Commandline crunch program, reduces size of a QOIP file by trying many opcode combinations
-- qoipcrunch-opt.h - Argument parsing for qoipcrunch.c, generated from a JSON file not currently included in the repo
-- qoip-fast.c - Fastpath implementations for commonly used opcode combinations. Included by the QOIP_C implementation only, split from qoip.h to make it less unwieldy
-- qoip-func.c - Encode/decode functions for opcodes used by the generic path. Included by the QOIP_C implementation only, split from qoip.h to make it less unwieldy
+- opt/* - Argument parsing code for the above tools
 

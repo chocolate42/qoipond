@@ -71,8 +71,8 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 				fprintf(stderr, "Error, -effort value must be at least 0\n");
 				return 1;
 			}
-			else if(opt->effort>7){
-				fprintf(stderr, "Error, -effort value must be at most 7\n");
+			else if(opt->effort>6){
+				fprintf(stderr, "Error, -effort value must be at most 6\n");
 				return 1;
 			}
 			++loc;
@@ -178,7 +178,7 @@ int optmode_help(){
 	printf(" -custom input\n");
 	printf("    Define a custom set of combinations (comma-delimited)\n\n");
 	printf(" -effort input\n");
-	printf("    Combination preset 0-7, higher tries more combinations, default 1.\n\n");
+	printf("    Combination preset 0-6, higher tries more combinations, default 1.\n\n");
 	printf(" -iterations input\n");
 	printf("    Number of iterations to try, default 1.\n\n");
 	printf(" -threads input\n");
