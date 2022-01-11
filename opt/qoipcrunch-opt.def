@@ -1,5 +1,10 @@
 [
 	{
+		"tag": "-license",
+		"type": "mode",
+		"description": "Display license",
+	},
+	{
 		"tag": "custom",
 		"type": "string",
 		"description": "Define a custom set of combinations (comma-delimited)",

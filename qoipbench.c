@@ -593,6 +593,30 @@ void benchmark_directory(opt_t *opt, char *effort, const char *path, benchmark_r
 	}
 }
 
+int optmode_license(opt_t *opt) {
+	printf("The MIT License(MIT)\n");
+	printf("\n");
+	printf("Copyright(c) 2021 Dominic Szablewski (original QOI format)\n");
+	printf("Copyright(c) 2021 Matthew Ling (adaptations for QOIP format)\n");
+	printf("\n");
+	printf("Permission is hereby granted, free of charge, to any person obtaining a copy of\n");
+	printf("this software and associated documentation files(the \"Software\"), to deal in\n");
+	printf("the Software without restriction, including without limitation the rights to\n");
+	printf("use, copy, modify, merge, publish, distribute, sublicense, and / or sell copies\n");
+	printf("of the Software, and to permit persons to whom the Software is furnished to do\n");
+	printf("so, subject to the following conditions :\n");
+	printf("The above copyright notice and this permission notice shall be included in all\n");
+	printf("copies or substantial portions of the Software.\n");
+	printf("THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n");
+	printf("IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n");
+	printf("FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE\n");
+	printf("AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n");
+	printf("LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n");
+	printf("OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n");
+	printf("SOFTWARE.\n");
+	return 0;
+}
+
 int main(int argc, char **argv) {
 	opt_t opt;
 	char effort_level[2];

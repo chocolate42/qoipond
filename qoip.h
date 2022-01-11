@@ -3,8 +3,8 @@
 Incompatible adaptation of QOI format - https://phoboslab.org
 
 -- LICENSE: The MIT License(MIT)
-Copyright(c) 2021 Dominic Szablewski (original QOI format)
-Copyright(c) 2021 Matthew Ling (adaptations for QOIP format)
+Copyright(c) 2021 Dominic Szablewski (QOI format QOIP is based on)
+Copyright(c) 2021 Matthew Ling (QOIP format)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files(the "Software"), to deal in

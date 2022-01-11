@@ -29,6 +29,7 @@ int opt_dispatch(opt_t *opt);
 /*All-in-one function that could substitute for main in simple cases*/
 int opt_aio(int argc, char *argv[]);
 /*Mode execution functions defined elsewhere*/
+int optmode_license(opt_t *opt);
 int optmode_list(opt_t *opt);
 
 /*Define OPT_C in one compilation unit for the implementation*/
@@ -65,7 +66,7 @@ static inline int opt_fread_fully(char **dest, size_t *dest_len, char *path){
 }
 
 int opt_init(opt_t *opt){
-	opt->_mode=2;
+	opt->_mode=3;
 	opt->effort=1;
 	opt->threads=1;
 	opt->entropy=0;
@@ -134,7 +135,7 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			++loc;
 		}
-		else if(strcmp("-list", argv[loc])==0){
+		else if(strcmp("-license", argv[loc])==0){
 			if(modeset){
 				fprintf(stderr, "Error, multiple modes defined\n");
 				return 1;
@@ -144,13 +145,23 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 				opt->_mode=0;
 			}
 		}
+		else if(strcmp("-list", argv[loc])==0){
+			if(modeset){
+				fprintf(stderr, "Error, multiple modes defined\n");
+				return 1;
+			}
+			else{
+				modeset=1;
+				opt->_mode=1;
+			}
+		}
 		else if(strcmp("-help", argv[loc])==0){
 			if(modeset){
 				fprintf(stderr, "Error, multiple mode args defined\n");
 				return 1;
 			}
 			else
-				opt->_mode=1;
+				opt->_mode=2;
 			++loc;
 		}
 		else{
@@ -165,10 +176,12 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 int opt_dispatch(opt_t *opt){
 	switch(opt->_mode){
 		case 0:
-			return optmode_list(opt);
+			return optmode_license(opt);
 		case 1:
+			return optmode_list(opt);
+		case 2:
 			return optmode_help();
-		case 2:/*No mode requested*/
+		case 3:/*No mode requested*/
 			return 0;
 		default:
 			fprintf(stderr, "Error, option mode invalid\n");
@@ -190,6 +203,8 @@ int opt_aio(int argc, char *argv[]){
 
 int optmode_help(){
 	printf("\nMODES:\n");
+	printf(" -license\n");
+	printf("    Display license\n");
 	printf(" -list\n");
 	printf("    List all known ops. id's can be used to build custom opstring's\n");
 
