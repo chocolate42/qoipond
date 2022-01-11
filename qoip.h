@@ -164,7 +164,6 @@ int qoip_stat(const void *encoded, FILE *io);
 #ifdef QOIP_C
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include "lz4.h"
 #include "zstd.h"
 
@@ -509,8 +508,15 @@ int qoip_ret(int ret, FILE *io, char *s) {
 	return ret;
 }
 
-int qoip_opstring_comp_id(const void *a, const void *b) {
-	return memcmp(a, b, 2);
+int qoip_opstring_comp_id(const void *aa, const void *bb) {
+	unsigned char *a = (unsigned char *)aa;
+	unsigned char *b = (unsigned char *)bb;
+	if(a[0]==b[0]&&a[1]==b[1])
+		return 0;
+	else if (a[0]<b[0] || (a[0]==b[0] && a[1]<b[1]) )
+		return -1;
+	else
+		return 1;
 }
 
 static void qoip_finish(qoip_working_t *q) {
@@ -655,14 +661,13 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
 	if(opstring == NULL || *opstring==0)
 		opstring = "0003080a0b11";/* Default */
-	opstr_len = strchr(opstring, ',') ? strchr(opstring, ',')-opstring : strlen(opstring);
+	for(opstr_len=0; opstring[opstr_len] && opstring[opstr_len]!=','; ++opstr_len);
 	if(opstr_len%2)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
 	if(opstr_len>512)
 		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, too big");
-	memcpy(opstr, opstring, opstr_len);
 	for(i=0;i<opstr_len;++i)/*lowercase*/
-		opstr[i] += (opstr[i]>64 && opstr[i]<71) ? 32 : 0;
+		opstr[i] = opstring[i] + ((opstring[i]>64 && opstring[i]<71) ? 32 : 0);
 	qsort(opstr, opstr_len/2, 2, qoip_opstring_comp_id);
 	if(parse_opstring(opstr, ops, &op_cnt))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
@@ -681,20 +686,17 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	q->upcache[0]=0;
 	q->upcache[1]=0;
 	q->upcache[2]=0;
-	if(desc->channels==4) {
-		for(i=0;i<(desc->width<8192?desc->width-1:8191);++i) {/* Prefill upcache to remove branch */
-			q->upcache[((i+1)*3)+0]=q->in[(i*desc->channels)+0];
-			q->upcache[((i+1)*3)+1]=q->in[(i*desc->channels)+1];
-			q->upcache[((i+1)*3)+2]=q->in[(i*desc->channels)+2];
-		}
+	for(i=0;i<(desc->width<8192?desc->width-1:8191);++i) {/* Prefill upcache to remove branch */
+		q->upcache[((i+1)*3)+0]=q->in[(i*desc->channels)+0];
+		q->upcache[((i+1)*3)+1]=q->in[(i*desc->channels)+1];
+		q->upcache[((i+1)*3)+2]=q->in[(i*desc->channels)+2];
 	}
-	else
-		memcpy(q->upcache+3, q->in, (desc->width<8192?desc->width-1:8191)*3);
 
-	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
+	/* Check for fastpath implementation */
+	/*for(i=0;i<qoip_fastpath_cnt;++i) {
 		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].enc)
 			return qoip_fastpath[i].enc(q, out_len);
-	}
+	}*/
 
 	/* Sort ops into order they should be tested on encode */
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set);
@@ -829,10 +831,11 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	q->px.v = 0;
 	q->px.rgba.a = 255;
 
-	for(i=0;i<qoip_fastpath_cnt;++i) {/* Check for fastpath implementation */
+	/* Check for fastpath implementation */
+	/*for(i=0;i<qoip_fastpath_cnt;++i) {
 		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
 			return qoip_fastpath[i].dec(q, desc->entropy?desc->encoded_size:data_len);
-	}
+	}*/
 
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
 	q->px_pos = 0;
