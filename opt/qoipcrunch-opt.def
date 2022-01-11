@@ -21,6 +21,14 @@
 		"max": 64,
 	},
 	{
+		"tag": "entropy",
+		"type": "int",
+		"description": "Entropy coder to use. 0=none, 1=LZ4, 2=ZSTD (default 0)",
+		"int": 0,
+		"min": 0,
+		"max": 2,
+	},
+	{
 		"tag": "in",
 		"type": "data",
 		"description": "Input path",

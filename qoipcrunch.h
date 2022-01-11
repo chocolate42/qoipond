@@ -33,7 +33,10 @@ SOFTWARE.
 extern "C" {
 #endif
 
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *scratch, int threads);
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *scratch, int threads, int entropy);
+
+/*The maximum size of entropy encoding of a given source size and entropy type*/
+size_t qoipcrunch_maxentropysize(size_t src, int entropy);
 
 #ifdef __cplusplus
 }
@@ -41,9 +44,35 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 #endif /* QOIPCRUNCH_H */
 
 #ifdef QOIPCRUNCH_C
+#include "lz4.h"
+#include "zstd.h"
 #include <omp.h>
 #include <stdio.h>
 #include <string.h>
+
+static void write_64(unsigned char *bytes, u64 v) {
+	bytes[0] = (v      ) & 0xff;
+	bytes[1] = (v >>  8) & 0xff;
+	bytes[2] = (v >> 16) & 0xff;
+	bytes[3] = (v >> 24) & 0xff;
+	bytes[4] = (v >> 32) & 0xff;
+	bytes[5] = (v >> 40) & 0xff;
+	bytes[6] = (v >> 48) & 0xff;
+	bytes[7] = (v >> 56) & 0xff;
+}
+
+size_t qoipcrunch_maxentropysize(size_t src, int entropy) {
+	switch(entropy) {
+		case 0:
+			return src;
+		case 1:
+			return LZ4_compressBound(src);
+		case 2:
+			return ZSTD_compressBound(src);
+		default:
+			return 0;
+	}
+}
 
 static void qoipcrunch_update_stats(size_t *currbest_len, char *currbest_str, size_t *candidate_len, char *candidate_str) {
 	size_t len;
@@ -72,7 +101,7 @@ typedef struct {
 /* Scratch is assumed big enough to house all working memory encodings, aka
 threads * qoip_maxsize(desc)
 */
-int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp, int threads) {
+int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp, int threads, int entropy) {
 	char currbest_str[256], *next_opstring;
 	int currbest = -1, j;
 	size_t currbest_len, w_len;
@@ -83,6 +112,10 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	size_t *working_len = scratch?&w_len:out_len;
 	int list_cnt, thread_cnt;
 	tm_t tm[QOIP_MAX_THREADS] = {0};
+	/* entropy variables */
+	unsigned char *ptr = (unsigned char*)out;
+	size_t p = 0, src_cnt, dst_cnt;
+	qoip_desc d;
 
 	currbest_len = qoip_maxsize(desc);
 
@@ -123,7 +156,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	list_cnt = 1 << level;
 
-	/*Dynamic threads currently disabled by option parsing as it requires scratch
+	/*Dynamic threads currently disabled by arg parsing as it requires scratch
 	to be dynamically allocated, which we are not doing. Fix or remove TODO */
 	thread_cnt = threads==0 ? omp_get_num_procs() : threads;
 	thread_cnt = thread_cnt>QOIP_MAX_THREADS ? QOIP_MAX_THREADS : thread_cnt;
@@ -169,6 +202,39 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	if(count)
 		*count=list_cnt;
+
+	/* Bolt entropy coding onto qoipcrunch_encode as a first attempt as we
+	have some convenient scratch memory in place. It's also the best place for
+	it when crunching as otherwise we need to redo best encode, assuming
+	we don't integrate entropy testing with crunching
+	Below only works when qoip_encode doesn't do entropy, which should be the case*/
+	if(entropy) {
+		qoip_read_header(out, &p, &d);
+		src_cnt = *out_len - p;
+		if(entropy==QOIP_ENTROPY_LZ4) {
+			dst_cnt = LZ4_compress_default((char *)ptr+p, tmp, src_cnt, LZ4_compressBound(src_cnt));
+			if(dst_cnt==0)
+				return qoip_ret(1, stdout, "LZ4 compression failed\n");
+		}
+		else if(entropy==QOIP_ENTROPY_ZSTD) {
+			dst_cnt = ZSTD_compress(tmp, ZSTD_compressBound(src_cnt), ptr+p, src_cnt, 19);
+			if(ZSTD_isError(dst_cnt))
+				return qoip_ret(1, stdout, "ZSTD compression failed\n");
+		}
+		else
+			return qoip_ret(1, stdout, "Entropy coding unknown");
+		if(dst_cnt<src_cnt) {
+			write_64(ptr+p, dst_cnt);
+			p+=8;
+			memcpy(ptr+p, tmp, dst_cnt);
+			p+=dst_cnt;
+			for(;p%8;)//EOF padding
+				ptr[p++]=0;
+			*out_len = p;
+			ptr[6]=entropy;
+		}
+	}
+
 	return 0;
 }
 

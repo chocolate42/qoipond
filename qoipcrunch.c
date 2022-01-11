@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
 	opt_t opt;
 	qoip_desc desc;
 	unsigned char *raw, *tmp, *scratch;
-	size_t tmp_len, cnt;
+	size_t tmp_len, cnt, max_size, raw_size;
 	char effort_str[2];
 
 	/* Process args */
@@ -68,15 +68,18 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	raw = malloc(qoip_maxsize_raw(&desc, desc.channels));
+	raw_size = qoip_maxsize_raw(&desc, desc.channels);
+	raw = malloc(raw_size);
 	assert(raw);
+
+	max_size = qoip_maxsize(&desc) < qoipcrunch_maxentropysize(qoip_maxsize(&desc), opt.entropy) ? qoipcrunch_maxentropysize(qoip_maxsize(&desc), opt.entropy) : qoip_maxsize(&desc);
 	qoip_decode(opt.in, opt.in_len, &desc, desc.channels, raw);
-	tmp = malloc(qoip_maxsize(&desc));
+	tmp = malloc(max_size);
 	assert(tmp);
-	scratch = malloc(qoip_maxsize(&desc)*opt.threads);
+	scratch = malloc(max_size*opt.threads);
 	assert(scratch);
 
-	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads))
+	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads, opt.entropy))
 		return 1;
 
 	if(opt.out) {

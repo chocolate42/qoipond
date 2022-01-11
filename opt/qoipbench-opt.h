@@ -8,11 +8,12 @@
 #include <string.h>
 
 typedef struct opt{
-	char *directory;
 	char *custom;
+	char *directory;
 	int effort;
-	int iterations;
 	int threads;
+	int entropy;
+	int iterations;
 	int warmup;
 	int png;
 	int verify;
@@ -40,8 +41,9 @@ int opt_aio(int argc, char *argv[]);
 int opt_init(opt_t *opt){
 	opt->_mode=1;
 	opt->effort=1;
-	opt->iterations=1;
 	opt->threads=1;
+	opt->entropy=0;
+	opt->iterations=1;
 	opt->warmup=1;
 	opt->png=1;
 	opt->verify=1;
@@ -49,20 +51,20 @@ int opt_init(opt_t *opt){
 	opt->decode=1;
 	opt->recurse=1;
 	opt->onlytotals=1;
-	opt->directory=NULL;
 	opt->custom=NULL;
+	opt->directory=NULL;
 	return 0;
 }
 
 int opt_process(opt_t *opt, int argc, char *argv[]){
 	int loc=1, modeset=0;
 	while(loc<argc){
-		if(strcmp("-directory", argv[loc])==0){
-				opt->directory=argv[loc+1];
+		if(strcmp("-custom", argv[loc])==0){
+				opt->custom=argv[loc+1];
 				++loc;
 		}
-		else if(strcmp("-custom", argv[loc])==0){
-				opt->custom=argv[loc+1];
+		else if(strcmp("-directory", argv[loc])==0){
+				opt->directory=argv[loc+1];
 				++loc;
 		}
 		else if(strcmp("-effort", argv[loc])==0){
@@ -77,18 +79,6 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			++loc;
 		}
-		else if(strcmp("-iterations", argv[loc])==0){
-			opt->iterations=atoi(argv[loc+1]);
-			if(opt->iterations<0){
-				fprintf(stderr, "Error, -iterations value must be at least 0\n");
-				return 1;
-			}
-			else if(opt->iterations>999){
-				fprintf(stderr, "Error, -iterations value must be at most 999\n");
-				return 1;
-			}
-			++loc;
-		}
 		else if(strcmp("-threads", argv[loc])==0){
 			opt->threads=atoi(argv[loc+1]);
 			if(opt->threads<1){
@@ -97,6 +87,30 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			else if(opt->threads>64){
 				fprintf(stderr, "Error, -threads value must be at most 64\n");
+				return 1;
+			}
+			++loc;
+		}
+		else if(strcmp("-entropy", argv[loc])==0){
+			opt->entropy=atoi(argv[loc+1]);
+			if(opt->entropy<0){
+				fprintf(stderr, "Error, -entropy value must be at least 0\n");
+				return 1;
+			}
+			else if(opt->entropy>2){
+				fprintf(stderr, "Error, -entropy value must be at most 2\n");
+				return 1;
+			}
+			++loc;
+		}
+		else if(strcmp("-iterations", argv[loc])==0){
+			opt->iterations=atoi(argv[loc+1]);
+			if(opt->iterations<0){
+				fprintf(stderr, "Error, -iterations value must be at least 0\n");
+				return 1;
+			}
+			else if(opt->iterations>999){
+				fprintf(stderr, "Error, -iterations value must be at most 999\n");
 				return 1;
 			}
 			++loc;
@@ -173,16 +187,18 @@ int opt_aio(int argc, char *argv[]){
 
 int optmode_help(){
 	printf("\nOPTIONS:\n");
-	printf(" -directory input\n");
-	printf("    The directory to benchmark\n\n");
 	printf(" -custom input\n");
 	printf("    Define a custom set of combinations (comma-delimited)\n\n");
+	printf(" -directory input\n");
+	printf("    The directory to benchmark\n\n");
 	printf(" -effort input\n");
 	printf("    Combination preset 0-6, higher tries more combinations, default 1.\n\n");
-	printf(" -iterations input\n");
-	printf("    Number of iterations to try, default 1.\n\n");
 	printf(" -threads input\n");
 	printf("    Number of threads to use. Default 1\n\n");
+	printf(" -entropy input\n");
+	printf("    Entropy coder to use. 0=none, 1=LZ4, 2=ZSTD (default 0)\n\n");
+	printf(" -iterations input\n");
+	printf("    Number of iterations to try, default 1.\n\n");
 	printf(" -warmup\n");
 	printf(" -no-warmup\n");
 	printf("    Perform a warmup run (default true)\n");

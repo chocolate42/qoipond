@@ -1,10 +1,5 @@
 [
 	{
-		"tag": "directory",
-		"type": "string",
-		"description": "The directory to benchmark",
-	},
-	{
 		"tag": "custom",
 		"type": "string",
 		"description": "Define a custom set of combinations (comma-delimited)",
@@ -18,20 +13,33 @@
 		"max": 6,
 	},
 	{
-		"tag": "iterations",
-		"type": "int",
-		"description": "Number of iterations to try, default 1.",
-		"int": 1,
-		"min": 0,
-		"max": 999,
-	},
-	{
 		"tag": "threads",
 		"type": "int",
 		"description": "Number of threads to use. Default 1",
 		"int": 1,
 		"min": 1,
 		"max": 64,
+	},
+	{
+		"tag": "entropy",
+		"type": "int",
+		"description": "Entropy coder to use. 0=none, 1=LZ4, 2=ZSTD (default 0)",
+		"int": 0,
+		"min": 0,
+		"max": 2,
+	},
+	{
+		"tag": "directory",
+		"type": "string",
+		"description": "The directory to benchmark",
+	},
+	{
+		"tag": "iterations",
+		"type": "int",
+		"description": "Number of iterations to try, default 1.",
+		"int": 1,
+		"min": 0,
+		"max": 999,
 	},
 	{
 		"tag": "warmup",

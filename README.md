@@ -42,27 +42,30 @@ qoip_file_header {
 	char     magic[4];   // Magic bytes "qoip"
 	uint8_t  channels;   // 3 = RGB, 4 = RGBA
 	uint8_t  colorspace; // 0 = sRGB with linear alpha, 1 = all channels linear
-	uint8_t  padding[2]; // Padded with 0x00 to 8 byte alignment
-	uint64_t size;       // Optional size of the bitstream_header and bitstream combined,
-                       // filled with 0x00 if unused
+	uint8_8  entropy;    // 0 = None, 1=LZ4, 2=ZSTD
+	uint8_t  padding;    // Padded with 0x00 to 8 byte alignment
+	uint64_t size;       // Size of the bitstream only (not including bitstream header)
 }
 
 qoip_bitstream_header {
-	uint32_t width;      // Image width in pixels
-	uint32_t height;     // Image height in pixels
-	uint8_t  version;    // Set to 0x00
-	uint8_t  opcode_cnt; // The number of opcodes used in this combination
-	uint8_t *opcodes;    // The opcodes used in ascending id order
-	uint8_t *padding;    // Padded with 0x00 to 8 byte alignment
+	uint32_t width;        // Image width in pixels
+	uint32_t height;       // Image height in pixels
+	uint8_t  version;      // Set to 0x00
+	uint8_t  opcode_cnt;   // The number of opcodes used in this combination
+	uint8_t  *opcodes;     // The opcodes used in ascending id order
+	uint8_t  *padding;     // Padded with 0x00 to 8 byte alignment
+	uint64_t entropy_size; // Only present if entropy coding is used. The size
+                         // of the entropy-coded data
 }
 
-qoip_bitstream {
+qoip_bitstream {       // If entropy coding is used, this is what's encoded
 	uint8_t *stream;     // The raw bitstream using a variable number of bytes.
+	uint8_t *padding;    // 8-15 bytes of 0x00 padding to pad to 8 byte alignment
+	                     // with at least 8 bytes of padding guaranteed
 }
 
 qoip_footer {
-	uint8_t *padding;    // 8-15 bytes of 0x00 padding to pad to 8 byte alignment
-	                     // with at least 8 bytes of padding guaranteed
+	uint8_t *padding;    // Padded with 0x00 to 8 byte alignment
 }
 ```
 
