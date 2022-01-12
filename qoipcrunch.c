@@ -94,7 +94,7 @@ int main(int argc, char *argv[]) {
 	raw = malloc(raw_size);
 	assert(raw);
 
-	max_size = qoip_maxsize(&desc) < qoipcrunch_maxentropysize(qoip_maxsize(&desc), opt.entropy) ? qoipcrunch_maxentropysize(qoip_maxsize(&desc), opt.entropy) : qoip_maxsize(&desc);
+	max_size = qoip_maxsize(&desc) < qoip_maxentropysize(qoip_maxsize(&desc), opt.entropy) ? qoip_maxentropysize(qoip_maxsize(&desc), opt.entropy) : qoip_maxsize(&desc);
 	qoip_decode(opt.in, opt.in_len, &desc, desc.channels, raw);
 	tmp = malloc(max_size);
 	assert(tmp);

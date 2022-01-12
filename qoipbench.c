@@ -409,7 +409,7 @@ benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 	desc_raw.channels = channels;
 	desc_raw.colorspace = QOIP_SRGB;
 	size_t qoip_max_size = qoip_maxsize(&desc_raw);
-	qoip_max_size = qoip_max_size < qoipcrunch_maxentropysize(qoip_max_size, opt->entropy) ? qoipcrunch_maxentropysize(qoip_max_size, opt->entropy) : qoip_max_size;
+	qoip_max_size = qoip_max_size < qoip_maxentropysize(qoip_max_size, opt->entropy) ? qoip_maxentropysize(qoip_max_size, opt->entropy) : qoip_max_size;
 	encoded_qoip = malloc(qoip_max_size);
 	scratch = malloc(qoip_max_size*opt->threads);
 	if (!encoded_qoip || !scratch) {

@@ -139,13 +139,19 @@ encoded data, out_len is its size in bytes. out is assumed to be large enough to
 hold the encoded data (see qoip_maxsize()). opcode_string is an optional string
 defining the opcode combination to use. It is up to the caller to ensure this
 string is valid, NULL is allowed which means the encoder uses the default combination. */
-int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string);
+int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string, int entropy, void *scratch);
 
-/* Return the maximum size of a QOIP encoded image with dimensions in desc */
+/* Return the maximum size of a no-entropy-coding QOIP image with dimensions in desc */
 size_t qoip_maxsize(const qoip_desc *desc);
 
 /* Return the maximum size of a decoded image with dimensions in desc */
 size_t qoip_maxsize_raw(const qoip_desc *desc, int channels);
+
+/* Maximum size of an entropy-coded chunk of data, for implementation usage */
+size_t qoip_maxentropysize(size_t src, int entropy);
+
+/* Bolted-on entropy coding, exposed so qoipcrunch_encode can use it */
+static int qoip_entropy(void *out, size_t *out_len, void *tmp, int entropy);
 
 /* Populate desc by reading a QOIP header. If loc is NULL, read from
 bytes + 0, otherwise read from bytes + *loc. Advance loc if present.
@@ -404,7 +410,7 @@ void qoip_write_file_header(unsigned char *bytes, size_t *p, const qoip_desc *de
 	qoip_write_32(bytes, p, QOIP_MAGIC);
 	bytes[(*p)++] = desc->channels;
 	bytes[(*p)++] = desc->colorspace;
-	bytes[(*p)++] = 0;/*entropy_coding:0=raw, others TODO*/
+	bytes[(*p)++] = 0;/*entropy coding, 0 placeholder for this non-streaming implementation*/
 	bytes[(*p)++] = 0;/*padding*/
 	for(i=0;i<8;++i)/*size placeholder*/
 		bytes[(*p)++] = 0;
@@ -558,6 +564,58 @@ static void qoip_finish(qoip_working_t *q) {
 	qoip_write_64(q->out+8, q->p-q->bitstream_loc);
 }
 
+size_t qoip_maxentropysize(size_t src, int entropy) {
+	switch(entropy) {
+		case 0:
+			return src;
+		case 1:
+			return LZ4_compressBound(src);
+		case 2:
+			return ZSTD_compressBound(src);
+		default:
+			return 0;
+	}
+}
+
+/* Bolted-on entropy encoding implementation, this way it can be reused by
+qoipcrunch_encode */
+static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) {
+	unsigned char *ptr = (unsigned char*)out;
+	size_t p = 0, src_cnt, dst_cnt, loc_bithead, loc_bitstream;
+	qoip_desc d;
+	qoip_read_file_header(out, &p, &d);
+	loc_bithead = p;
+	qoip_skip_bitstream_header(out, &p, &d);
+	loc_bitstream = p;
+	src_cnt = *out_len - p;
+	if(entropy==QOIP_ENTROPY_LZ4) {
+		dst_cnt = LZ4_compress_default((char *)ptr+p, scratch, src_cnt, LZ4_compressBound(src_cnt));
+		if(dst_cnt==0)
+			return qoip_ret(1, stdout, "qoip_entropy: LZ4 compression failed\n");
+	}
+	else if(entropy==QOIP_ENTROPY_ZSTD) {
+		dst_cnt = ZSTD_compress(scratch, ZSTD_compressBound(src_cnt), ptr+p, src_cnt, 19);
+		if(ZSTD_isError(dst_cnt))
+			return qoip_ret(1, stdout, "qoip_entropy: ZSTD compression failed\n");
+	}
+	else
+		return qoip_ret(1, stdout, "qoip_entropy: Requested entropy coding unknown, update encoder?");
+
+	if(dst_cnt<src_cnt) {
+		for(p=loc_bitstream-1;p>=loc_bithead;--p)/*Shift bitstream header to make room for entropy_cnt*/
+			ptr[p+8] = ptr[p];
+		qoip_write_64(ptr+loc_bithead, dst_cnt);
+		for(p=0;p<dst_cnt;++p)
+			ptr[loc_bitstream + 8 + p] = ((unsigned char *)scratch)[p];
+		p = loc_bitstream + 8 + dst_cnt;
+		for(;p%8;)//EOF padding
+			ptr[p++]=0;
+		*out_len = p;
+		ptr[6]=entropy;
+	}
+	return 0;
+}
+
 int qoip_stat(const void *encoded, FILE *io) {
 	int op_cnt;
 	qoip_desc desc;
@@ -686,7 +744,7 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 	q->index2[q->hash] = q->px;
 }
 
-int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring) {
+int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring, int entropy, void *scratch) {
 	char opstr[513] = {0};
 	size_t opstr_len;
 	int i, op_cnt = 0;
@@ -702,6 +760,9 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		desc->channels < 3 || desc->channels > 4 || desc->colorspace > 1
 	)
 		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
+	if (entropy && !scratch)
+		return qoip_ret(1, stderr, "qoip_encode: Scratch space needs to be provided for entropy encoding");
+
 	if(opstring == NULL || *opstring==0)
 		opstring = "0003080a0b11";/* Default */
 	for(opstr_len=0; opstring[opstr_len] && opstring[opstr_len]!=','; ++opstr_len);
@@ -769,6 +830,9 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	qoip_encode_run(q);/* Cap off ending run if present*/
 	qoip_finish(q);
 	*out_len = q->p;
+
+	if(entropy)
+		qoip_entropy(out, out_len, scratch, entropy);
 	return 0;
 }
 
