@@ -98,7 +98,7 @@ size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc 
 void *qoip_read(const char *filename, qoip_desc *desc, int channels) {
 	FILE *f = fopen(filename, "rb");
 	size_t max_size, size;
-	void *pixels, *data;
+	void *pixels, *data, *scratch = NULL;
 
 	if (!f)
 		return NULL;
@@ -124,9 +124,11 @@ void *qoip_read(const char *filename, qoip_desc *desc, int channels) {
 	qoip_read_header(data, NULL, desc);
 	max_size = qoip_maxsize_raw(desc, channels);
 	pixels = QOIP_MALLOC(max_size);
+	if(desc->entropy)
+		scratch = QOIP_MALLOC(desc->raw_cnt);
 	if (
-		!pixels ||
-		qoip_decode(data, size, desc, channels, pixels)
+		!pixels || !scratch ||
+		qoip_decode(data, size, desc, channels, pixels, scratch)
 	) {
 		QOIP_FREE(pixels);
 		return 0;

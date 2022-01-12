@@ -131,7 +131,7 @@ typedef struct {
 /* Decode a QOIP image from memory. The function either returns 1 on failure
 (invalid parameters) or 0 on sucess. On success, the qoip_desc struct is filled
 with the description from the file header. */
-int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out);
+int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out, void *scratch);
 
 /* Encode raw RGB or RGBA pixels into a QOIP image in memory. The function either
 returns 1 on failure (invalid parameters) or 0 on success. On success out is the
@@ -886,13 +886,12 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 	}
 }
 
-int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out) {
+int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out, void *scratch) {
 	char opstr[513] = {0};
 	int i, op_cnt;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];
-	unsigned char *entropy_data=NULL;
 
 	q->in = (const unsigned char *)data;
 	q->out = (unsigned char *)out;
@@ -914,19 +913,20 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 
 	if(desc->entropy) {
-		entropy_data = malloc(desc->raw_cnt);
+		if(!scratch)
+			return qoip_ret(1, stderr, "qoip_decode: Scratch space needs to be provided for entropy decoding");
 		if(desc->entropy==QOIP_ENTROPY_LZ4) {
-			if(LZ4_decompress_safe((char *)q->in + q->p, (char *)entropy_data, desc->entropy_cnt, desc->raw_cnt)!=desc->raw_cnt)
+			if(LZ4_decompress_safe((char *)q->in + q->p, (char *)scratch, desc->entropy_cnt, desc->raw_cnt)!=desc->raw_cnt)
 				return qoip_ret(1, stderr, "qoip_decode: LZ4 decode failed");
 		}
 		else if(desc->entropy==QOIP_ENTROPY_ZSTD) {
-			if(ZSTD_isError(ZSTD_decompress(entropy_data, desc->raw_cnt, q->in + q->p, desc->entropy_cnt)))
+			if(ZSTD_isError(ZSTD_decompress(scratch, desc->raw_cnt, q->in + q->p, desc->entropy_cnt)))
 				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
 		}
 		else
 			return qoip_ret(1, stderr, "qoip_decode: Unknown entropy coding, update decoder?");
 		q->p = 0;
-		q->in = entropy_data;
+		q->in = scratch;
 	}
 
 	q->width = desc->width;
@@ -964,8 +964,6 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 			}
 		}
 	}
-	if(entropy_data)
-		free(entropy_data);
 	return 0;
 }
 

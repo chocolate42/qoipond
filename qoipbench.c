@@ -436,7 +436,7 @@ benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 
 	// Verify QOIP Output
 	if (opt->verify) {
-		if(qoip_decode(encoded_qoip, encoded_qoip_size, &desc_enc, channels, pixels_qoip)) {
+		if(qoip_decode(encoded_qoip, encoded_qoip_size, &desc_enc, channels, pixels_qoip, scratch)) {
 			ERROR("Error, verify qoip_decode failed %s", path);
 		}
 		if (memcmp(pixels, pixels_qoip, w * h * channels) != 0) {
@@ -469,7 +469,7 @@ benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 
 		BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.qoip.decode_time, {
 			qoip_desc desc;
-			if(qoip_decode(encoded_qoip, encoded_qoip_size, &desc, 4, pixels_qoip)) {
+			if(qoip_decode(encoded_qoip, encoded_qoip_size, &desc, 4, pixels_qoip, scratch)) {
 				ERROR("Error, qoip_decode failed %s", path);
 			}
 		});
