@@ -114,7 +114,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	tm_t tm[QOIP_MAX_THREADS] = {0};
 	/* entropy variables */
 	unsigned char *ptr = (unsigned char*)out;
-	size_t p = 0, src_cnt, dst_cnt;
+	size_t p = 0, src_cnt, dst_cnt, loc_bithead, loc_bitstream;
 	qoip_desc d;
 
 	currbest_len = qoip_maxsize(desc);
@@ -208,8 +208,17 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	it when crunching as otherwise we need to redo best encode, assuming
 	we don't integrate entropy testing with crunching
 	Below only works when qoip_encode doesn't do entropy, which should be the case*/
+	/*
+	file header
+	entropy_cnt
+	bitstream header
+	bitstream
+	*/
 	if(entropy) {
-		qoip_read_header(out, &p, &d);
+		qoip_read_file_header(out, &p, &d);
+		loc_bithead = p;
+		qoip_skip_bitstream_header(out, &p, &d);
+		loc_bitstream = p;
 		src_cnt = *out_len - p;
 		if(entropy==QOIP_ENTROPY_LZ4) {
 			dst_cnt = LZ4_compress_default((char *)ptr+p, tmp, src_cnt, LZ4_compressBound(src_cnt));
@@ -224,10 +233,11 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		else
 			return qoip_ret(1, stdout, "Entropy coding unknown");
 		if(dst_cnt<src_cnt) {
-			write_64(ptr+p, dst_cnt);
-			p+=8;
-			memcpy(ptr+p, tmp, dst_cnt);
-			p+=dst_cnt;
+			/* Shift bitstream header to make room for entropy_cnt in file header */
+			memmove(ptr+loc_bithead+8, ptr+loc_bithead, loc_bitstream - loc_bithead);
+			write_64(ptr+loc_bithead, dst_cnt);
+			memcpy(ptr+loc_bitstream+8, tmp, dst_cnt);
+			p = loc_bitstream + 8 + dst_cnt;
 			for(;p%8;)//EOF padding
 				ptr[p++]=0;
 			*out_len = p;

@@ -123,7 +123,8 @@ typedef struct {
 	u32 height;
 	u8 channels;
 	u8 colorspace;
-	u64 encoded_size;
+	u64 raw_cnt;
+	u64 entropy_cnt;
 	int entropy;
 } qoip_desc;
 
@@ -147,8 +148,16 @@ size_t qoip_maxsize(const qoip_desc *desc);
 size_t qoip_maxsize_raw(const qoip_desc *desc, int channels);
 
 /* Populate desc by reading a QOIP header. If loc is NULL, read from
-bytes + 0, otherwise read from bytes + *loc. Advance loc if present. */
+bytes + 0, otherwise read from bytes + *loc. Advance loc if present.
+Convenience method for external code to read entire header without knowing internals */
 int qoip_read_header(const unsigned char *bytes, size_t *loc, qoip_desc *desc);
+
+/* File header read separately */
+int qoip_read_file_header(const unsigned char *bytes, size_t *p, qoip_desc *desc);
+
+/* Bitstream header read separately, just enough to determine its size.
+This exists to avoid exposing internals with qoip_read_bitstream_header */
+int qoip_skip_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc *desc);
 
 /* Print s to io and return ret, typically used to print error and return error code */
 int qoip_ret(int ret, FILE *io, char *s);
@@ -302,21 +311,40 @@ static u64 qoip_read_64(const unsigned char *bytes, size_t *p) {
 	return r;
 }
 
-static int qoip_read_file_header(const unsigned char *bytes, size_t *p, qoip_desc *desc) {
+int qoip_read_file_header(const unsigned char *bytes, size_t *p, qoip_desc *desc) {
 	size_t loc = p ? *p : 0;
 	unsigned int header_magic = qoip_read_32(bytes, &loc);
 	desc->channels = bytes[loc++];
 	desc->colorspace = bytes[loc++];
 	desc->entropy = bytes[loc++];
 	++loc;/*padding*/
-	desc->encoded_size = qoip_read_64(bytes, &loc);
+	desc->raw_cnt = qoip_read_64(bytes, &loc);
+	desc->entropy_cnt = desc->entropy ? qoip_read_64(bytes, &loc) : 0;
 	if (p)
 		*p = loc;
 	return desc->channels < 3 || desc->channels > 4 ||
 		desc->colorspace > 1 || header_magic != QOIP_MAGIC;
 }
 
-static int qoip_read_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc *desc, qoip_opcode_t *ops, int *op_cnt) {
+int qoip_skip_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc *desc) {
+	u8 version, cnt;
+	size_t loc = p ? *p : 0;
+	desc->width  = qoip_read_32(bytes, &loc);
+	desc->height = qoip_read_32(bytes, &loc);
+	version = bytes[loc++];
+	cnt = bytes[loc++];
+	loc+=cnt;
+	for(;loc%8;++loc) {
+		if(bytes[loc])/* Padding non-zero */
+			return 1;
+	}
+
+	if (p)
+		*p = loc;
+	return desc->width == 0 || desc->height == 0 || version || cnt == 0;
+}
+
+int qoip_read_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc *desc, qoip_opcode_t *ops, int *op_cnt) {
 	int i;
 	u8 version, cnt;
 	size_t loc = p ? *p : 0;
@@ -342,7 +370,6 @@ static int qoip_read_bitstream_header(const unsigned char *bytes, size_t *p, qoi
 	return desc->width == 0 || desc->height == 0 || version || cnt == 0;
 }
 
-/* Convenience method for external code to populate desc without knowing internals */
 int qoip_read_header(const unsigned char *bytes, size_t *p, qoip_desc *desc) {
 	size_t loc = p ? *p : 0;
 	if(qoip_read_file_header(bytes, &loc, desc))
@@ -531,9 +558,6 @@ static void qoip_finish(qoip_working_t *q) {
 	qoip_write_64(q->out+8, q->p-q->bitstream_loc);
 }
 
-/* Investigate ANS-coding binary opstring in header TODO
-This could allow for a fixed size bitstream header by storing the opstring
-as u64 and allow for easier analysis by returning the value here */
 int qoip_stat(const void *encoded, FILE *io) {
 	int op_cnt;
 	qoip_desc desc;
@@ -550,15 +574,31 @@ int qoip_stat(const void *encoded, FILE *io) {
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
 		return qoip_ret(1, stderr, "qoip_stat: Failed to expand opstring");
 
-	if(desc.encoded_size)
-		fprintf(io, "Bitstream size: %"PRIu64"\n", desc.encoded_size);
+	if(     desc.entropy==QOIP_ENTROPY_NONE)
+		fprintf(io, "Entropy coding: None\n");
+	else if(desc.entropy==QOIP_ENTROPY_LZ4)
+		fprintf(io, "Entropy coding: LZ4\n");
+	else if(desc.entropy==QOIP_ENTROPY_ZSTD)
+		fprintf(io, "Entropy coding: ZSTD\n");
 	else
-		fprintf(io, "Bitstream size unknown (streamed)\n");
+		fprintf(io, "Entropy coding: Unknown\n");
+
+	if(desc.entropy_cnt)
+		fprintf(io, "Entropy-coded size: %"PRIu64"\n", desc.entropy_cnt);
+	if(desc.raw_cnt)
+		fprintf(io, "Raw bitstream size: %"PRIu64"\n", desc.raw_cnt);
+	else
+		fprintf(io, "Raw bitstream size unknown (streamed)\n");
 
 	fprintf(io, "Width: %6"PRIu32"\n", desc.width);
 	fprintf(io, "Height:%6"PRIu32"\n", desc.height);
 	fprintf(io, "Channels: %"PRIu8"\n", desc.channels);
 	fprintf(io, "Colorspace: %s\n", desc.colorspace==QOIP_SRGB ? "sRGB" : "Linear");
+
+	fprintf(io, "Opstring: ");
+	for(i=0; i<op_cnt; ++i)
+		fprintf(io, "%02x", ops[i].id);
+	fprintf(io, "\n\n");
 
 	for(i=0; i<op_cnt; ++i) {
 		fprintf(io, "Opcode 0x%02x: %s\n", ops[i].opcode, qoip_ops[ops[i].id].desc);
@@ -786,7 +826,6 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];
 	unsigned char *entropy_data=NULL;
-	u64 entropy_cnt;
 
 	q->in = (const unsigned char *)data;
 	q->out = (unsigned char *)out;
@@ -808,14 +847,13 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
 
 	if(desc->entropy) {
-		entropy_cnt = qoip_read_64(q->in, &(q->p));/*size of compressed bitstream*/
-		entropy_data = malloc(desc->encoded_size);
+		entropy_data = malloc(desc->raw_cnt);
 		if(desc->entropy==QOIP_ENTROPY_LZ4) {
-			if(LZ4_decompress_safe((char *)q->in + q->p, (char *)entropy_data, entropy_cnt, desc->encoded_size)!=desc->encoded_size)
+			if(LZ4_decompress_safe((char *)q->in + q->p, (char *)entropy_data, desc->entropy_cnt, desc->raw_cnt)!=desc->raw_cnt)
 				return qoip_ret(1, stderr, "qoip_decode: LZ4 decode failed");
 		}
 		else if(desc->entropy==QOIP_ENTROPY_ZSTD) {
-			if(ZSTD_isError(ZSTD_decompress(entropy_data, desc->encoded_size, q->in + q->p, entropy_cnt)))
+			if(ZSTD_isError(ZSTD_decompress(entropy_data, desc->raw_cnt, q->in + q->p, desc->entropy_cnt)))
 				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
 		}
 		else
@@ -834,7 +872,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	/* Check for fastpath implementation */
 	/*for(i=0;i<qoip_fastpath_cnt;++i) {
 		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
-			return qoip_fastpath[i].dec(q, desc->entropy?desc->encoded_size:data_len);
+			return qoip_fastpath[i].dec(q, desc->entropy?desc->raw_cnt:data_len);
 	}*/
 
 	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
@@ -842,7 +880,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	if(q->channels==4) {
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
 			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
-				qoip_decode_inner(q, desc->entropy?desc->encoded_size:data_len, ops, op_cnt);
+				qoip_decode_inner(q, desc->entropy?desc->raw_cnt:data_len, ops, op_cnt);
 				*(qoip_rgba_t*)(q->out + q->px_pos) = q->px;
 				q->px_pos += 4;
 			}
@@ -851,7 +889,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	else {
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
 			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
-				qoip_decode_inner(q, desc->entropy?desc->encoded_size:data_len, ops, op_cnt);
+				qoip_decode_inner(q, desc->entropy?desc->raw_cnt:data_len, ops, op_cnt);
 				q->out[q->px_pos + 0] = q->px.rgba.r;
 				q->out[q->px_pos + 1] = q->px.rgba.g;
 				q->out[q->px_pos + 2] = q->px.rgba.b;
