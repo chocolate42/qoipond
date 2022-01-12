@@ -1,0 +1,17 @@
+[
+	{
+		"tag": "-license",
+		"type": "mode",
+		"description": "Display license",
+	},
+	{
+		"tag": "in",
+		"type": "data",
+		"description": "QOIP file to stat",
+	},
+	{
+		"tag": "-list",
+		"type": "mode",
+		"description": "List all known ops. id's can be used to build custom opstring's",
+	},
+]

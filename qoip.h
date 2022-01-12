@@ -564,7 +564,7 @@ int qoip_stat(const void *encoded, FILE *io) {
 	qoip_opcode_t ops[OP_END];
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
-	size_t i, p = 0;
+	size_t i, p = 0, raw;
 	const unsigned char *bytes = (const unsigned char *) encoded;
 
 	if(qoip_read_file_header(bytes, &p, &desc))
@@ -573,6 +573,11 @@ int qoip_stat(const void *encoded, FILE *io) {
 		return qoip_ret(1, stderr, "qoip_stat: Failed to read bitstream header");
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
 		return qoip_ret(1, stderr, "qoip_stat: Failed to expand opstring");
+
+	fprintf(io, "Width: %6"PRIu32"\n", desc.width);
+	fprintf(io, "Height:%6"PRIu32"\n", desc.height);
+	fprintf(io, "Channels: %"PRIu8"\n", desc.channels);
+	fprintf(io, "Colorspace: %s\n", desc.colorspace==QOIP_SRGB ? "sRGB" : "Linear");
 
 	if(     desc.entropy==QOIP_ENTROPY_NONE)
 		fprintf(io, "Entropy coding: None\n");
@@ -583,31 +588,29 @@ int qoip_stat(const void *encoded, FILE *io) {
 	else
 		fprintf(io, "Entropy coding: Unknown\n");
 
-	if(desc.entropy_cnt)
-		fprintf(io, "Entropy-coded size: %"PRIu64"\n", desc.entropy_cnt);
-	if(desc.raw_cnt)
-		fprintf(io, "Raw bitstream size: %"PRIu64"\n", desc.raw_cnt);
-	else
-		fprintf(io, "Raw bitstream size unknown (streamed)\n");
 
-	fprintf(io, "Width: %6"PRIu32"\n", desc.width);
-	fprintf(io, "Height:%6"PRIu32"\n", desc.height);
-	fprintf(io, "Channels: %"PRIu8"\n", desc.channels);
-	fprintf(io, "Colorspace: %s\n", desc.colorspace==QOIP_SRGB ? "sRGB" : "Linear");
+	raw = desc.width*desc.height*desc.channels;
+	fprintf(io,   "Raw size:                   %9zu\n", raw);
+	if(desc.raw_cnt)
+		fprintf(io, "Uncompressed bitstream size:%9"PRIu64"\n", desc.raw_cnt);
+	else
+		fprintf(io, "Uncompressed bitstream size unknown (streamed)\n");
+	if(desc.entropy_cnt)
+		fprintf(io, "Entropy-coded size:         %9"PRIu64"\n", desc.entropy_cnt);
 
 	fprintf(io, "Opstring: ");
 	for(i=0; i<op_cnt; ++i)
 		fprintf(io, "%02x", ops[i].id);
 	fprintf(io, "\n\n");
 
-	for(i=0; i<op_cnt; ++i) {
-		fprintf(io, "Opcode 0x%02x: %s\n", ops[i].opcode, qoip_ops[ops[i].id].desc);
-	}
-	fprintf(io, "Opcode 0x%02x: OP_RGB\n", q->rgb_opcode);
-	fprintf(io, "Opcode 0x%02x: OP_RGBA\n", q->rgba_opcode);
-	fprintf(io, "Opcode 0x%02x: OP_RUN2\n", q->run2_opcode);
+	fprintf(io, "Ops:\n");
+	for(i=0; i<op_cnt; ++i)
+		fprintf(io, "%s\n", qoip_ops[ops[i].id].desc);
+	fprintf(io, "OP_RGB\n");
+	fprintf(io, "OP_RGBA\n");
+	fprintf(io, "OP_RUN2\n");
 	if(q->run1_opcode) {
-		fprintf(io, "Opcode 0x%02x: OP_RUN1\n", q->run1_opcode);
+		fprintf(io, "OP_RUN1\n");
 		fprintf(io, "RUN1 range: 1..%d\n", q->run1_len);
 	}
 	fprintf(io, "RUN2 range: %d..%d\n", q->run1_len+1, q->run2_len);

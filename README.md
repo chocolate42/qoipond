@@ -94,8 +94,9 @@ qoip_footer {
 
 ### Tools
 
-- qoipbench.c - Commandline benchmark comparing QOIP, PNG and STBI formats
-- qoipconv.c - Commandline converter to/from QOIP format
-- qoipcrunch.c - Commandline crunch program, reduces size of a QOIP file by trying many opcode combinations
+- qoipbench - Commandline benchmark comparing QOIP, PNG and STBI formats
+- qoipconv - Commandline converter to/from QOIP format
+- qoipcrunch - Commandline crunch program, reduces size of a QOIP file by trying many opcode combinations
+- qoipstat - Reads the header of a QOIP file to display information
 - opt/* - Argument parsing code for the above tools
 

@@ -11,9 +11,12 @@ qoipconv:
 qoipcrunch:
 	$(CC) -o$@ qoipcrunch.c $(CFLAGS) $(LIBS)
 
-all: qoipbench qoipconv qoipcrunch
+qoipstat:
+	$(CC) -o$@ qoipstat.c $(CFLAGS) $(LIBS)
+
+all: qoipbench qoipconv qoipcrunch qoipstat
 
 .PHONY: clean
 
 clean:
-	rm -f qoipbench qoipconv qoipcrunch
+	rm -f qoipbench qoipconv qoipcrunch qoipstat
