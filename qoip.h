@@ -71,8 +71,8 @@ Implementing new ops tl;dr:
 
 #define QOIP_COLOR_HASH(C) (C.rgba.r*3 + C.rgba.g*5 + C.rgba.b*7 + C.rgba.a*11)
 #define QOIP_MAGIC (((u32)'p') << 24 | ((u32)'i') << 16 | ((u32)'o') <<  8 | ((u32)'q'))
-#define QOIP_FILE_HEADER_SIZE 16
-#define QOIP_BITSTREAM_HEADER_MAXSIZE (16 + 256)
+#define QOIP_FILE_HEADER_SIZE 24
+#define QOIP_BITSTREAM_HEADER_MAXSIZE (24 + 256)
 
 #include <inttypes.h>
 #include <stddef.h>
@@ -99,22 +99,19 @@ enum{QOIP_SRGB, QOIP_LINEAR};
 
 enum{QOIP_ENTROPY_NONE, QOIP_ENTROPY_LZ4, QOIP_ENTROPY_ZSTD};
 
-/* Opcode id's. Never change order, remove an op, or add a new op anywhere other
-than at the end. Doing this allows for basic backwards compatibility. The order
-of this enum must match the order of qoip_ops[] as these values are an index
-into it. Less kludgey implementation TODO */
+#define QOIP_OPCNT(id)   (1<<(7-((id)>>5)))
+#define QOIP_MASK(id)  (((1<<(7-((id)>>5)))-1)^255)
+/* Opcode id's. Upper 3 bits of id encode the mask, read by the above defines
+new_op: Maintain existing ops by adding to end of mask rows */
 enum{
-	OP_INDEX8, OP_INDEX7, OP_INDEX6, OP_INDEX5, OP_INDEX4, OP_INDEX3,
-
-	/* 1 byte RGB  ops */OP_DELTA, OP_DIFF1_222, OP_LUMA1_232,
-	/* 2 byte RGB  ops */OP_LUMA2_454, OP_LUMA2_464,
-	/* 3 byte RGB  ops */OP_LUMA3_676, OP_LUMA3_686, OP_LUMA3_787,
-	/* 1 byte RGBA ops */OP_DELTAA,
-	/* 2 byte RGBA ops */OP_A, OP_LUMA2_3433,
-	/* 3 byte RGBA ops */OP_LUMA3_4645, OP_LUMA3_5654,
-	/* 4 byte RGBA ops */OP_LUMA4_7777,
-	OP_LUMA1_232_BIAS,
-	/* new_op id goes here */
+	/*MASK1*/OP_INDEX7=0x00, OP_INDEX7F, OP_LUMA1_232B, OP_LUMA1_232,
+	/*MASK2*/OP_INDEX6=0x20, OP_INDEX6F, OP_DELTAA, OP_DIFF1_222, OP_LUMA2_464, OP_LUMA3_787,
+	/*MASK3*/OP_INDEX5=0x40, OP_INDEX5F, OP_DELTA, OP_LUMA2_454, OP_LUMA2_3433,
+	/*MASK4*/OP_INDEX4=0x60, OP_INDEX4F, OP_LUMA3_686, OP_LUMA3_5654, OP_LUMA4_7777,
+	/*MASK5*/OP_INDEX3=0x80, OP_INDEX3F, OP_LUMA3_676, OP_LUMA3_4645,
+	/*MASK6*//*OP_=0xa0,*/
+	/*MASK7*//*OP_=0xc0,*/
+	/*MASK8*/OP_INDEX8=0xe0, OP_INDEX8F, OP_A,
 	OP_END
 };
 
@@ -186,9 +183,6 @@ int qoip_stat(const void *encoded, FILE *io);
 the order ops are sorted for encode/decode. Modify with caution. */
 enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4, QOIP_SET_LEN5};
 
-/* Decode masks */
-enum{MASK_1=0x80, MASK_2=0xc0, MASK_3=0xe0, MASK_4=0xf0, MASK_5=0xf8, MASK_6=0xfc, MASK_7=0xfe, MASK_8=0xff};
-
 typedef union {
 	struct { u8 r, g, b, a; } rgba;
 	u32 v;
@@ -206,7 +200,16 @@ typedef struct {
 	u8 run1_opcode, run2_opcode, rgb_opcode, rgba_opcode;
 } qoip_working_t;
 
-/* All attributes necessary to use an opcode */
+/* Master opcode definitions */
+typedef struct {
+	u8 id, set;
+	char *desc;
+	int (*enc)(qoip_working_t *, u8);
+	void (*dec)(qoip_working_t *);
+	int (*sim)(qoip_working_t *);
+} opdef_t;
+
+/* Runtime opcodes built from master definitions */
 typedef struct {
 	u8 id, mask, set, opcode, opcnt;
 	int (*enc)(qoip_working_t *, u8);
@@ -214,79 +217,58 @@ typedef struct {
 	int (*sim)(qoip_working_t *);
 } qoip_opcode_t;
 
-/* Expanded generic definition of an opcode. Half of these values are copied
-from global qoip_ops into the qoip_opcode_t used at runtime */
-typedef struct {
-	u8 id, mask, set;
-	char *desc;
-	int (*enc)(qoip_working_t *, u8);
-	void (*dec)(qoip_working_t *);
-	int (*sim)(qoip_working_t *);
-	int opcnt;
-} opdef_t;
-
 /* Op encode/decode functions split into qoip-func.c, new_op functions go there */
 #include "qoip-func.c"
 
-/* For ease of implementation treat qoip_ops the same as the opcode enum.
-Corresponding values must be in the same relative location */
+/* new_op definitions go here, if qoip_op_lookup remains linear order doesn't matter */
+static int qoip_ops_cnt = 21;
 static const opdef_t qoip_ops[] = {
-	{OP_INDEX8, MASK_8, QOIP_SET_INDEX2, "OP_INDEX8: 2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8, qoip_sim_index8, 1},
-	{OP_INDEX7, MASK_1, QOIP_SET_INDEX1, "OP_INDEX7: 1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index, 128},
-	{OP_INDEX6, MASK_2, QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index,  64},
-	{OP_INDEX5, MASK_3, QOIP_SET_INDEX1, "OP_INDEX5: 1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index,  32},
-	{OP_INDEX4, MASK_4, QOIP_SET_INDEX1, "OP_INDEX4: 1 byte,  16 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index,  16},
-	{OP_INDEX3, MASK_5, QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index,   8},
+	{OP_INDEX7,   QOIP_SET_INDEX1, "OP_INDEX7:     1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index},
+	{OP_LUMA1_232B, QOIP_SET_LEN1, "OP_LUMA1_232B: 1 byte delta, OP_LUMA1_232 but with R and B biased depending on direction of G", qoip_enc_luma1_232_bias, qoip_dec_luma1_232_bias, qoip_sim_luma1_232_bias},
+	{OP_LUMA1_232,  QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, (avg_gr  -2..1 , avg_g  -4..3 , avg_gb  -2..1 )", qoip_enc_luma1_232, qoip_dec_luma1_232, qoip_sim_luma1_232},
 
-	{OP_DELTA,      MASK_3, QOIP_SET_LEN1, "OP_DELTA:      1 byte delta, ( avg_r  -1..1 , avg_g  -1..1 ,  avg_b  -1..1 ), AND\n"
-                                         "                                              (            0 , avg_g  -4..3 ,             0 )", qoip_enc_delta, qoip_dec_delta, qoip_sim_delta, 32},
-	{OP_DIFF1_222,  MASK_2, QOIP_SET_LEN1, "OP_DIFF:       1 byte delta, ( avg_r  -2..1 , avg_g  -2..1 ,   avg_b -2..1 )", qoip_enc_diff1_222, qoip_dec_diff1_222, qoip_sim_diff1_222, 64},
-	{OP_LUMA1_232,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, (avg_gr  -2..1 , avg_g  -4..3 , avg_gb  -2..1 )", qoip_enc_luma1_232, qoip_dec_luma1_232, qoip_sim_luma1_232, 128},
+	{OP_INDEX6,   QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index},
+	{OP_DELTAA,     QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta, ( avg_r  -1..1 , avg_g  -1..1 ,   avg_b -1..1 , va -1 or 1), AND\n"
+                                 "                             (            0 ,            0 ,              0, va  -5..4 )", qoip_enc_deltaa, qoip_dec_deltaa, qoip_sim_deltaa},
+	{OP_DIFF1_222,  QOIP_SET_LEN1, "OP_DIFF1_222:  1 byte delta, ( avg_r  -2..1 , avg_g  -2..1 ,   avg_b -2..1 )", qoip_enc_diff1_222, qoip_dec_diff1_222, qoip_sim_diff1_222},
+	{OP_LUMA2_464,  QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, (avg_gr  -8..7 , avg_g -32..31, avg_gb  -8..7 )", qoip_enc_luma2_464, qoip_dec_luma2_464, qoip_sim_luma2_464},
+	{OP_LUMA3_787,  QOIP_SET_LEN3, "OP_LUMA3_787:  3 byte delta, (avg_gr -64..63, avg_g        , avg_gb -64..63)", qoip_enc_luma3_787, qoip_dec_luma3_787, qoip_sim_luma3_787},
 
-	{OP_LUMA2_454,  MASK_3, QOIP_SET_LEN2, "OP_LUMA2_454:  2 byte delta, (avg_gr  -8..7 , avg_g -16..15, avg_gb  -8..7 )", qoip_enc_luma2_454, qoip_dec_luma2_454, qoip_sim_luma2_454, 32},
-	{OP_LUMA2_464,  MASK_2, QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, (avg_gr  -8..7 , avg_g -32..31, avg_gb  -8..7 )", qoip_enc_luma2_464, qoip_dec_luma2_464, qoip_sim_luma2_464, 64},
+	{OP_INDEX5,   QOIP_SET_INDEX1, "OP_INDEX5:     1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index},
+	{OP_DELTA,      QOIP_SET_LEN1, "OP_DELTA:      1 byte delta, ( avg_r  -1..1 , avg_g  -1..1 ,  avg_b  -1..1 ), AND\n"
+                                 "                             (            0 , avg_g  -4..3 ,             0 )", qoip_enc_delta, qoip_dec_delta, qoip_sim_delta},
+	{OP_LUMA2_454,  QOIP_SET_LEN2, "OP_LUMA2_454:  2 byte delta, (avg_gr  -8..7 , avg_g -16..15, avg_gb  -8..7 )", qoip_enc_luma2_454, qoip_dec_luma2_454, qoip_sim_luma2_454},
+	{OP_LUMA2_3433, QOIP_SET_LEN2, "OP_LUMA2_3433: 2 byte delta, (avg_gr  -4..3 , avg_g  -8..7 , avg_gb  -4..3 , va  -4..3 )", qoip_enc_luma2_3433, qoip_dec_luma2_3433, qoip_sim_luma2_3433},
 
-	{OP_LUMA3_676,  MASK_5, QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, (avg_gr -32..31, avg_g -64..63, avg_gb -32..31)", qoip_enc_luma3_676, qoip_dec_luma3_676, qoip_sim_luma3_676, 8},
-	{OP_LUMA3_686,  MASK_4, QOIP_SET_LEN3, "OP_LUMA3_686:  3 byte delta, (avg_gr -32..31, avg_g        , avg_gb -32..31)", qoip_enc_luma3_686, qoip_dec_luma3_686, qoip_sim_luma3_686, 16},
-	{OP_LUMA3_787,  MASK_2, QOIP_SET_LEN3, "OP_LUMA3_787:  3 byte delta, (avg_gr -64..63, avg_g        , avg_gb -64..63)", qoip_enc_luma3_787, qoip_dec_luma3_787, qoip_sim_luma3_787, 64},
+	{OP_INDEX4,   QOIP_SET_INDEX1, "OP_INDEX4:     1 byte,  16 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index},
+	{OP_LUMA3_686,  QOIP_SET_LEN3, "OP_LUMA3_686:  3 byte delta, (avg_gr -32..31, avg_g        , avg_gb -32..31)", qoip_enc_luma3_686, qoip_dec_luma3_686, qoip_sim_luma3_686},
+	{OP_LUMA3_5654, QOIP_SET_LEN3, "OP_LUMA3_5654: 3 byte delta, (avg_gr -16..15, avg_g -32..31, avg_gb -16..15, va  -8..7 )", qoip_enc_luma3_5654, qoip_dec_luma3_5654, qoip_sim_luma3_5654},
+	{OP_LUMA4_7777, QOIP_SET_LEN4, "OP_LUMA4_7777: 4 byte delta, (avg_gr -64..63, avg_g -64..63, avg_gb -64..63, va -64..63)", qoip_enc_luma4_7777, qoip_dec_luma4_7777, qoip_sim_luma4_7777},
 
-	{OP_DELTAA,     MASK_2, QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta, ( avg_r  -1..1 , avg_g  -1..1 ,   avg_b -1..1 , va -1 or 1), AND\n"
-                                         "                                              (            0 ,            0 ,              0, va  -5..4 )", qoip_enc_deltaa, qoip_dec_deltaa, qoip_sim_deltaa, 64},
-	{OP_A,          MASK_8, QOIP_SET_LEN2, "OP_A:          2 byte delta, (            0 ,            0 ,             0 ,  a        )", qoip_enc_a, qoip_dec_a, qoip_sim_a, 1},
-	{OP_LUMA2_3433, MASK_3, QOIP_SET_LEN2, "OP_LUMA2_3433: 2 byte delta, (avg_gr  -4..3 , avg_g  -8..7 , avg_gb  -4..3 , va  -4..3 )", qoip_enc_luma2_3433, qoip_dec_luma2_3433, qoip_sim_luma2_3433, 32},
-	{OP_LUMA3_4645, MASK_5, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, (avg_gr  -8..7 , avg_g -32..31, avg_gb  -8..7 , va -16..15)", qoip_enc_luma3_4645, qoip_dec_luma3_4645, qoip_sim_luma3_4645, 8},
-	{OP_LUMA3_5654, MASK_4, QOIP_SET_LEN3, "OP_LUMA3_5654: 3 byte delta, (avg_gr -16..15, avg_g -32..31, avg_gb -16..15, va  -8..7 )", qoip_enc_luma3_5654, qoip_dec_luma3_5654, qoip_sim_luma3_5654, 16},
-	{OP_LUMA4_7777, MASK_4, QOIP_SET_LEN4, "OP_LUMA4_7777: 4 byte delta, (avg_gr -64..63, avg_g -64..63, avg_gb -64..63, va -64..63)", qoip_enc_luma4_7777, qoip_dec_luma4_7777, qoip_sim_luma4_7777, 16},
+	{OP_INDEX3,   QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index},
+	{OP_LUMA3_676,  QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, (avg_gr -32..31, avg_g -64..63, avg_gb -32..31)", qoip_enc_luma3_676, qoip_dec_luma3_676, qoip_sim_luma3_676},
+	{OP_LUMA3_4645, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, (avg_gr  -8..7 , avg_g -32..31, avg_gb  -8..7 , va -16..15)", qoip_enc_luma3_4645, qoip_dec_luma3_4645, qoip_sim_luma3_4645},
 
-
-	{OP_LUMA1_232_BIAS,  MASK_1, QOIP_SET_LEN1, "OP_LUMA1_232B: 1 byte delta, OP_LUMA1_232 but with R and B biased depending on direction of G", qoip_enc_luma1_232_bias, qoip_dec_luma1_232_bias, qoip_sim_luma1_232_bias, 128},
-	/* new_op definitions go here*/
-	{OP_END},
+	{OP_INDEX8,   QOIP_SET_INDEX2, "OP_INDEX8:     2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8, qoip_sim_index8},
+	{OP_A,          QOIP_SET_LEN2, "OP_A:          2 byte delta, (            0 ,            0 ,             0 ,  a        )", qoip_enc_a, qoip_dec_a, qoip_sim_a},
 };
 
-void qoip_print_ops(const opdef_t *ops, FILE *io) {
-	for(;ops->id!=OP_END;++ops)
-		fprintf(io, "id=%02x, size=%3d, %s\n", ops->id, ops->opcnt, ops->desc);
+void qoip_print_ops(FILE *io) {
+	int i;
+	for(i=0; i<qoip_ops_cnt; ++i)
+		fprintf(io, "id=%02x, size=%3d, %s\n", qoip_ops[i].id, QOIP_OPCNT(qoip_ops[i].id), qoip_ops[i].desc);
 }
 
 void qoip_print_op(const opdef_t *op, FILE *io) {
 	fprintf(io, "id=%02x, %s\n", op->id, op->desc);
 }
 
-/* Order by id for writing to header */
+/* Order by id for writing to header, doubles as ordering by mask1..mask8 */
 static int qoip_op_comp_id(const void *a, const void *b) {
 	if( ((qoip_opcode_t *)a)->id == ((qoip_opcode_t *)b)->id )
 		return 0;
 	else
 		return ( ((qoip_opcode_t *)a)->id < ((qoip_opcode_t *)b)->id ) ? -1: 1;
-}
-
-/* Order by mask size for opcode generation */
-static int qoip_op_comp_mask(const void *a, const void *b) {
-	if( ((qoip_opcode_t *)a)->mask == ((qoip_opcode_t *)b)->mask )
-		return 0;
-	else
-		return ( ((qoip_opcode_t *)a)->mask < ((qoip_opcode_t *)b)->mask ) ? -1: 1;
 }
 
 /* Order to be tried on encode */
@@ -457,53 +439,68 @@ static inline int qoip_valid_char(u8 chr) {
 		return -1;
 }
 
+static inline const opdef_t* qoip_op_lookup(u8 id) {
+	int i;
+	for(i=0;i<qoip_ops_cnt;++i) {
+		if(qoip_ops[i].id==id)
+			return qoip_ops + i;
+	}
+	return NULL;
+}
+
 static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 	int i=0, num, index1_present=0;
+	const opdef_t *opdef;
 	*op_cnt = 0;
 	for(; opstr[i] && opstr[i]!=','; ++i) {
-		if(i==(2*OP_END))
-			return 1;/* More ops defined than exist in the implementation */
 		num = qoip_valid_char(opstr[i]);
 		if(num == -1)
-			return 2;/* First char failed the number test */
+			return 1;/* First char failed the number test */
 		++i;
 		if(qoip_valid_char(opstr[i]) == -1)
-			return 3;/* Second char failed the number test */
+			return 2;/* Second char failed the number test */
 		num = (num<<4) | qoip_valid_char(opstr[i]);
-		if(num>=OP_END)
-			return 4;/* An op is defined beyond the largest op in the implementation */
 		ops[*op_cnt].id=num;
 		++*op_cnt;
 	}
 	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	for(i=1;i<*op_cnt;++i) {
 		if(ops[i].id==ops[i-1].id)
-			return 5;/* Repeated opcode */
+			return 3;/* Repeated opcode */
 	}
 	for(i=0;i<*op_cnt;++i) {
-		if(qoip_ops[ops[i].id].set == QOIP_SET_INDEX1)
+		opdef = qoip_op_lookup(ops[i].id);
+		if(!opdef) {
+			printf("Couldn't find %02x\n", ops[i].id);
+			return 4;/* Invalid op id */
+		}
+		if(opdef->set == QOIP_SET_INDEX1)
 			++index1_present;
 	}
 	if(index1_present>1)
-		return 6;/* Multiple 1 byte run or index encodings, invalid combination */
+		return 5;/* Multiple 1 byte run or index encodings, invalid combination */
 	return 0;
 }
 
 /* Generate everything related to an opcode, including the opcode itself */
 static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *q) {
 	int i, op = 0;
+	const opdef_t *opdef;
 	for(i=0;i<*op_cnt;++i) {
-		ops[i].mask = qoip_ops[ops[i].id].mask;
-		ops[i].set  =  qoip_ops[ops[i].id].set;
-		ops[i].enc  =  qoip_ops[ops[i].id].enc;
-		ops[i].dec  =  qoip_ops[ops[i].id].dec;
-		ops[i].sim  =  qoip_ops[ops[i].id].sim;
-		ops[i].opcnt  =  qoip_ops[ops[i].id].opcnt;
+		opdef = qoip_op_lookup(ops[i].id);
+		if(!opdef)
+			return 1;/* Invalid op id */
+		ops[i].mask  = QOIP_MASK(ops[i].id);
+		ops[i].opcnt = QOIP_OPCNT(ops[i].id);
+		ops[i].set   = opdef->set;
+		ops[i].enc   = opdef->enc;
+		ops[i].dec   = opdef->dec;
+		ops[i].sim   = opdef->sim;
 		if(ops[i].set==QOIP_SET_INDEX1)
 			q->index1_maxval = ops[i].opcnt - 1;
 	}
 
-	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
+	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	for(i=0;i<*op_cnt;++i) {
 		ops[i].opcode = op;
 		op += ops[i].opcnt;
@@ -618,6 +615,7 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 
 int qoip_stat(const void *encoded, FILE *io) {
 	int op_cnt;
+	const opdef_t *opdef;
 	qoip_desc desc;
 	qoip_opcode_t ops[OP_END];
 	qoip_working_t qq = {0};
@@ -646,7 +644,6 @@ int qoip_stat(const void *encoded, FILE *io) {
 	else
 		fprintf(io, "Entropy coding: Unknown\n");
 
-
 	raw = desc.width*desc.height*desc.channels;
 	fprintf(io,   "Raw size:                   %9zu\n", raw);
 	if(desc.raw_cnt)
@@ -662,8 +659,12 @@ int qoip_stat(const void *encoded, FILE *io) {
 	fprintf(io, "\n\n");
 
 	fprintf(io, "Ops:\n");
-	for(i=0; i<op_cnt; ++i)
-		fprintf(io, "%s\n", qoip_ops[ops[i].id].desc);
+	for(i=0; i<op_cnt; ++i) {
+		opdef = qoip_op_lookup(ops[i].id);
+		if(!opdef)
+			return qoip_ret(1, stderr, "qoip_stat: Invalid opcode");
+		fprintf(io, "%s\n", opdef->desc);
+	}
 	fprintf(io, "OP_RGB\n");
 	fprintf(io, "OP_RGBA\n");
 	fprintf(io, "OP_RUN2\n");
@@ -942,7 +943,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 			return qoip_fastpath[i].dec(q, desc->entropy?desc->raw_cnt:data_len);
 	}*/
 
-	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_mask);
+	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	q->px_pos = 0;
 	if(q->channels==4) {
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {

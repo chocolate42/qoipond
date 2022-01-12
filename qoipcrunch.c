@@ -61,7 +61,7 @@ int optmode_list(opt_t *opt) {
 	printf("Key:\na: Alpha verbatim\nvr, vg, vb, va: Channel difference from previous pixel\n");
 	printf("avg_r, avg_g, avg_b: Channel difference from average of previous pixel and pixel above\n");
 	printf("avg_gr, avg_gb: r/b channel difference from average relative to g\n");
-	qoip_print_ops(qoip_ops, stdout);
+	qoip_print_ops(stdout);
 	return 0;
 }
 
