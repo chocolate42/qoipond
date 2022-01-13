@@ -190,8 +190,8 @@ typedef union {
 
 /* All working variables needed by a single encode/decode run */
 typedef struct {
-	size_t p, px_pos, px_w, px_h, width, height, bitstream_loc;
-	int channels, hash, run, run1_len, run2_len, index1_maxval, stride;
+	size_t bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
+	int channels, hash, run, run1_len, run2_len, index1_maxval;
 	unsigned char *out, upcache[8192*3];
 	const unsigned char *in;
 	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
@@ -565,6 +565,8 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 	loc_bitstream = p;
 	src_cnt = *out_len - p;
 	if(entropy==QOIP_ENTROPY_LZ4) {
+		if(src_cnt > LZ4_MAX_INPUT_SIZE)
+			return qoip_ret(1, stdout, "qoip_entropy: Data too big for LZ4, not using entropy (use external LZ4 instead and bug maintainer to implement the advanced API)\n");
 		dst_cnt = LZ4_compress_default((char *)ptr+p, scratch, src_cnt, LZ4_compressBound(src_cnt));
 		if(dst_cnt==0)
 			return qoip_ret(1, stdout, "qoip_entropy: LZ4 compression failed\n");
@@ -593,13 +595,13 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 }
 
 int qoip_stat(const void *encoded, FILE *io) {
-	int op_cnt;
+	int i, op_cnt;
 	const opdef_t *opdef;
 	qoip_desc desc;
 	qoip_opcode_t ops[OP_END];
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
-	size_t i, p = 0, raw;
+	size_t p = 0, raw;
 	const unsigned char *bytes = (const unsigned char *) encoded;
 
 	if(qoip_read_file_header(bytes, &p, &desc))
@@ -726,7 +728,8 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 }
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring, int entropy, void *scratch) {
-	int i, op_cnt = 0;
+	u32 i;
+	int op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];

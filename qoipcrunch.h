@@ -121,7 +121,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		if(count)
 			*count=cnt;
 		if(entropy)
-			return qoip_entropy(out, out_len, tmp, entropy);
+			qoip_entropy(out, out_len, tmp, entropy);
 		return 0;
 	}
 	else if(level==0)/*escape hatch for effort level 0 which can directly encode*/
@@ -177,7 +177,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		*count=list_cnt;
 
 	if(entropy)
-		return qoip_entropy(out, out_len, tmp, entropy);
+		qoip_entropy(out, out_len, tmp, entropy);
 	return 0;
 }
 
