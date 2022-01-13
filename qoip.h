@@ -181,7 +181,7 @@ int qoip_stat(const void *encoded, FILE *io);
 
 /* Defines which set an op belongs to. The order of this enum determines
 the order ops are sorted for encode/decode. Modify with caution. */
-enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4, QOIP_SET_LEN5};
+enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4};
 
 typedef union {
 	struct { u8 r, g, b, a; } rgba;
@@ -261,14 +261,6 @@ void qoip_print_ops(FILE *io) {
 
 void qoip_print_op(const opdef_t *op, FILE *io) {
 	fprintf(io, "id=%02x, %s\n", op->id, op->desc);
-}
-
-/* Order by id for writing to header, doubles as ordering by mask1..mask8 */
-static int qoip_op_comp_id(const void *a, const void *b) {
-	if( ((qoip_opcode_t *)a)->id == ((qoip_opcode_t *)b)->id )
-		return 0;
-	else
-		return ( ((qoip_opcode_t *)a)->id < ((qoip_opcode_t *)b)->id ) ? -1: 1;
 }
 
 /* Order to be tried on encode */
@@ -404,7 +396,6 @@ void qoip_write_bitstream_header(unsigned char *bytes, size_t *p, const qoip_des
 	qoip_write_32(bytes, p, desc->height);
 	bytes[(*p)++] = 0;/* Version */
 	bytes[(*p)++] = op_cnt;
-	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	for(i=0;i<op_cnt;++i)
 		bytes[(*p)++] = ops[i].id;
 	for(i=op_cnt+2;i%8;++i)/* Padding */
@@ -448,10 +439,11 @@ static inline const opdef_t* qoip_op_lookup(u8 id) {
 	return NULL;
 }
 
+/* Parse opstring into opcodes sorted by id */
 static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 	int i=0, num, index1_present=0;
+	int opcodes_present[OP_END] = {0};
 	const opdef_t *opdef;
-	*op_cnt = 0;
 	for(; opstr[i] && opstr[i]!=','; ++i) {
 		num = qoip_valid_char(opstr[i]);
 		if(num == -1)
@@ -460,22 +452,22 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 		if(qoip_valid_char(opstr[i]) == -1)
 			return 2;/* Second char failed the number test */
 		num = (num<<4) | qoip_valid_char(opstr[i]);
-		ops[*op_cnt].id=num;
-		++*op_cnt;
+		if(num>=OP_END)
+			return 3;/* Invalid, beyond last valid id */
+		++opcodes_present[num];
 	}
-	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
-	for(i=1;i<*op_cnt;++i) {
-		if(ops[i].id==ops[i-1].id)
-			return 3;/* Repeated opcode */
-	}
-	for(i=0;i<*op_cnt;++i) {
-		opdef = qoip_op_lookup(ops[i].id);
-		if(!opdef) {
-			printf("Couldn't find %02x\n", ops[i].id);
-			return 4;/* Invalid op id */
+	*op_cnt=0;
+	for(i=0;i<OP_END;++i) {
+		if(opcodes_present[i]) {
+			if(opcodes_present[i] > 1)
+				printf("WARNING: opcode %02x present multiple times in opstring, proceeding with it deduplicated\n", i);
+			ops[(*op_cnt)++].id = i;
+			opdef = qoip_op_lookup(i);
+			if(!opdef)
+				return 4;/* Invalid op id */
+			if(opdef->set == QOIP_SET_INDEX1)
+				++index1_present;
 		}
-		if(opdef->set == QOIP_SET_INDEX1)
-			++index1_present;
 	}
 	if(index1_present>1)
 		return 5;/* Multiple 1 byte run or index encodings, invalid combination */
@@ -499,8 +491,6 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 		if(ops[i].set==QOIP_SET_INDEX1)
 			q->index1_maxval = ops[i].opcnt - 1;
 	}
-
-	qsort(ops, *op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	for(i=0;i<*op_cnt;++i) {
 		ops[i].opcode = op;
 		op += ops[i].opcnt;
@@ -536,17 +526,6 @@ static inline void qoip_encode_run(qoip_working_t *q) {
 int qoip_ret(int ret, FILE *io, char *s) {
 	fprintf(io, "%s\n", s);
 	return ret;
-}
-
-int qoip_opstring_comp_id(const void *aa, const void *bb) {
-	unsigned char *a = (unsigned char *)aa;
-	unsigned char *b = (unsigned char *)bb;
-	if(a[0]==b[0]&&a[1]==b[1])
-		return 0;
-	else if (a[0]<b[0] || (a[0]==b[0] && a[1]<b[1]) )
-		return -1;
-	else
-		return 1;
 }
 
 static void qoip_finish(qoip_working_t *q) {
@@ -685,6 +664,7 @@ typedef struct {
 } qoip_fastpath_t;
 
 int qoip_fastpath_cnt = 0;/*Disabled for average implementation as it breaks these TODO*/
+/*Refactor from opstring to bytestring ids when fixing as opstr has been removed*/
 static const qoip_fastpath_t qoip_fastpath[] = {
 	{0}
 	//{"0003080a0b11", qoip_encode_deltax, qoip_decode_deltax},
@@ -746,8 +726,6 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 }
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring, int entropy, void *scratch) {
-	char opstr[513] = {0};
-	size_t opstr_len;
 	int i, op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
@@ -766,15 +744,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 
 	if(opstring == NULL || *opstring==0)
 		opstring = "0003080a0b11";/* Default */
-	for(opstr_len=0; opstring[opstr_len] && opstring[opstr_len]!=','; ++opstr_len);
-	if(opstr_len%2)
-		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, must be multiple of two");
-	if(opstr_len>512)
-		return qoip_ret(1, stderr, "qoip_encode: Opstring invalid, too big");
-	for(i=0;i<opstr_len;++i)/*lowercase*/
-		opstr[i] = opstring[i] + ((opstring[i]>64 && opstring[i]<71) ? 32 : 0);
-	qsort(opstr, opstr_len/2, 2, qoip_opstring_comp_id);
-	if(parse_opstring(opstr, ops, &op_cnt))
+	if(parse_opstring(opstring, ops, &op_cnt))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to expand opstring");
@@ -943,7 +913,6 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 			return qoip_fastpath[i].dec(q, desc->entropy?desc->raw_cnt:data_len);
 	}*/
 
-	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_id);
 	q->px_pos = 0;
 	if(q->channels==4) {
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
