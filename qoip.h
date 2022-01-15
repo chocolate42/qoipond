@@ -97,7 +97,7 @@ The colorspace is purely informative. It will be saved to the file header, but
 does not affect en-/decoding in any way. */
 enum{QOIP_SRGB, QOIP_LINEAR};
 
-enum{QOIP_ENTROPY_NONE, QOIP_ENTROPY_LZ4, QOIP_ENTROPY_ZSTD};
+enum{QOIP_ENTROPY_NONE, QOIP_ENTROPY_LZ4, QOIP_ENTROPY_ZSTD, QOIP_ENTROPY_ZSTD_DICTIONARY};
 
 #define QOIP_OPCNT(id)   (1<<(7-((id)>>5)))
 #define QOIP_MASK(id)  (((1<<(7-((id)>>5)))-1)^255)
@@ -548,11 +548,16 @@ size_t qoip_maxentropysize(size_t src, int entropy) {
 			return LZ4_compressBound(src);
 		case 2:
 			return ZSTD_compressBound(src);
+		case 3:
+			return ZSTD_compressBound(src);
 		default:
 			return 0;
 	}
 }
 
+//temporarily implement a dictionary as global nonsense for testing
+static void *qoip_dic=NULL;
+static size_t qoip_dic_cnt=112640;
 /* Bolted-on entropy encoding implementation, this way it can be reused by
 qoipcrunch_encode */
 static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) {
@@ -575,6 +580,24 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 		dst_cnt = ZSTD_compress(scratch, ZSTD_compressBound(src_cnt), ptr+p, src_cnt, 19);
 		if(ZSTD_isError(dst_cnt))
 			return qoip_ret(1, stdout, "qoip_entropy: ZSTD compression failed\n");
+	}
+	else if(entropy==QOIP_ENTROPY_ZSTD_DICTIONARY) {
+		ZSTD_CCtx* const cctx = ZSTD_createCCtx();
+		if(!qoip_dic) {
+			FILE *io = fopen("dictionary", "rb");
+			if(!io)
+				return qoip_ret(1, stdout, "qoip_entropy: Failed to open dictionary\n");
+			qoip_dic=malloc(qoip_dic_cnt);
+			if(!qoip_dic)
+				return qoip_ret(1, stdout, "qoip_entropy: Failed to malloc dictionary\n");
+			if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt)
+				return qoip_ret(1, stdout, "qoip_entropy: Failed to load dictionary\n");
+			fclose(io);
+		}
+		dst_cnt = ZSTD_compress_usingDict(cctx, scratch, ZSTD_compressBound(src_cnt), ptr+p, src_cnt, qoip_dic, qoip_dic_cnt, 19);
+		ZSTD_freeCCtx(cctx);
+		if(ZSTD_isError(dst_cnt))
+			return qoip_ret(1, stdout, "qoip_entropy: ZSTD dictionary compression failed\n");
 	}
 	else
 		return qoip_ret(1, stdout, "qoip_entropy: Requested entropy coding unknown, update encoder?");
@@ -896,6 +919,23 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		else if(desc->entropy==QOIP_ENTROPY_ZSTD) {
 			if(ZSTD_isError(ZSTD_decompress(scratch, desc->raw_cnt, q->in + q->p, desc->entropy_cnt)))
 				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
+		}
+		else if(desc->entropy==QOIP_ENTROPY_ZSTD_DICTIONARY) {
+			if(!qoip_dic) {
+				FILE *io = fopen("dictionary", "rb");
+				if(!io)
+					return qoip_ret(1, stdout, "qoip_entropy: Failed to open dictionary\n");
+				qoip_dic=malloc(qoip_dic_cnt);
+				if(!qoip_dic)
+					return qoip_ret(1, stdout, "qoip_entropy: Failed to malloc dictionary\n");
+				if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt)
+					return qoip_ret(1, stdout, "qoip_entropy: Failed to load dictionary\n");
+				fclose(io);
+			}
+			ZSTD_DCtx* const dctx = ZSTD_createDCtx();
+			if(ZSTD_isError(ZSTD_decompress_usingDict(dctx, scratch, desc->raw_cnt, q->in + q->p, desc->entropy_cnt, qoip_dic, qoip_dic_cnt)))
+				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
+			ZSTD_freeDCtx(dctx);
 		}
 		else
 			return qoip_ret(1, stderr, "qoip_decode: Unknown entropy coding, update decoder?");
