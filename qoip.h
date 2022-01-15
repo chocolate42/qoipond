@@ -3,7 +3,7 @@
 Incompatible adaptation of QOI format - https://phoboslab.org
 
 -- LICENSE: The MIT License(MIT)
-Copyright(c) 2021 Dominic Szablewski (QOI format QOIP is based on)
+Copyright(c) 2021 Dominic Szablewski (QOI format)
 Copyright(c) 2021 Matthew Ling (QOIP format)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -34,10 +34,8 @@ This library provides the following functions
 	qoip_decode: Decode QOIP image in memory to raw RGB/RGBA pixels in memory
 
 	qoip_encode can take an optional string defining a combination of opcodes to use.
-	If set to NULL a default string is used.
-
-	qoip_decode takes the number of channels to output (3 or 4), regardless of the
-	number of channels the file contains.
+	If set to NULL a default string is used. qoip_decode takes the number of channels
+	to output (3 or 4), regardless of the number of channels the file contains.
 
 -- FORMAT:
 See README.md for layout.
@@ -174,7 +172,6 @@ int qoip_stat(const void *encoded, FILE *io);
 #endif /* QOIP_H */
 
 #ifdef QOIP_C
-#include <stdlib.h>
 #include <stdio.h>
 #include "lz4.h"
 #include "zstd.h"
@@ -263,12 +260,33 @@ void qoip_print_op(const opdef_t *op, FILE *io) {
 	fprintf(io, "id=%02x, %s\n", op->id, op->desc);
 }
 
-/* Order to be tried on encode */
-static int qoip_op_comp_set(const void *a, const void *b) {
-	if( ((qoip_opcode_t *)a)->set == ((qoip_opcode_t *)b)->set )
-		return 0;
-	else
-		return ( ((qoip_opcode_t *)a)->set < ((qoip_opcode_t *)b)->set ) ? -1: 1;
+static inline void qoip_memcpy(void *d, void *s, size_t len) {
+	size_t i;
+	for(i=0;i<len;++i)
+		((char*)d)[i]=((char*)s)[i];
+}
+
+static inline void qoip_opcode_swap(qoip_opcode_t *a, qoip_opcode_t *b) {
+	qoip_opcode_t t;
+	qoip_memcpy(&t, a, sizeof(qoip_opcode_t));
+	qoip_memcpy(a, b, sizeof(qoip_opcode_t));
+	qoip_memcpy(b, &t, sizeof(qoip_opcode_t));
+}
+
+/* Bad sort algorithm but set is tiny so it's fine */
+static inline void qoip_sort_set(qoip_opcode_t *ops, int op_cnt) {
+	int i, j;
+	for(i=0;i<op_cnt;++i) {
+		for(j=i+1;j<op_cnt;++j) {
+			if(ops[i].set==ops[j].set) {
+				if(ops[i].id>ops[j].id)
+					qoip_opcode_swap(ops+i, ops+j);
+			}
+			else
+				if(ops[i].set>ops[j].set)
+					qoip_opcode_swap(ops+i, ops+j);
+		}
+	}
 }
 
 static u32 qoip_read_32(const unsigned char *bytes, size_t *p) {
@@ -556,13 +574,28 @@ size_t qoip_maxentropysize(size_t src, int entropy) {
 }
 
 //temporarily implement a dictionary as global nonsense for testing
-static void *qoip_dic=NULL;
+static char qoip_dic[112640];
 static size_t qoip_dic_cnt=112640;
+static int qoip_dic_loaded=0;
+static int qoip_dic_load() {
+	FILE *io;
+	if(!qoip_dic_loaded) {
+		io = fopen("dictionary", "rb");
+		if(!io)
+			return qoip_ret(1, stdout, "qoip_entropy: Failed to open dictionary\n");
+		if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt)
+			return qoip_ret(1, stdout, "qoip_entropy: Failed to load dictionary\n");
+		fclose(io);
+		qoip_dic_loaded=1;
+	}
+	return 0;
+}
 /* Bolted-on entropy encoding implementation, this way it can be reused by
 qoipcrunch_encode */
 static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) {
 	unsigned char *ptr = (unsigned char*)out;
 	size_t p = 0, src_cnt, dst_cnt, loc_bithead, loc_bitstream;
+	ZSTD_CCtx *cctx;
 	qoip_desc d;
 	qoip_read_file_header(out, &p, &d);
 	loc_bithead = p;
@@ -582,18 +615,8 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 			return qoip_ret(1, stdout, "qoip_entropy: ZSTD compression failed\n");
 	}
 	else if(entropy==QOIP_ENTROPY_ZSTD_DICTIONARY) {
-		ZSTD_CCtx* const cctx = ZSTD_createCCtx();
-		if(!qoip_dic) {
-			FILE *io = fopen("dictionary", "rb");
-			if(!io)
-				return qoip_ret(1, stdout, "qoip_entropy: Failed to open dictionary\n");
-			qoip_dic=malloc(qoip_dic_cnt);
-			if(!qoip_dic)
-				return qoip_ret(1, stdout, "qoip_entropy: Failed to malloc dictionary\n");
-			if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt)
-				return qoip_ret(1, stdout, "qoip_entropy: Failed to load dictionary\n");
-			fclose(io);
-		}
+		cctx = ZSTD_createCCtx();
+		qoip_dic_load();
 		dst_cnt = ZSTD_compress_usingDict(cctx, scratch, ZSTD_compressBound(src_cnt), ptr+p, src_cnt, qoip_dic, qoip_dic_cnt, 19);
 		ZSTD_freeCCtx(cctx);
 		if(ZSTD_isError(dst_cnt))
@@ -769,7 +792,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		return qoip_ret(1, stderr, "qoip_encode: Scratch space needs to be provided for entropy encoding");
 
 	if(opstring == NULL || *opstring==0)
-		opstring = "0003080a0b11";/* Default */
+		opstring = "e04002246263";/*L232B + I5 ...*/
 	if(parse_opstring(opstring, ops, &op_cnt))
 		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
@@ -800,7 +823,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	}*/
 
 	/* Sort ops into order they should be tested on encode */
-	qsort(ops, op_cnt, sizeof(qoip_opcode_t), qoip_op_comp_set);
+	qoip_sort_set(ops, op_cnt);
 	q->px_pos = 0;
 	if(q->channels==4) {
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
@@ -921,18 +944,8 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
 		}
 		else if(desc->entropy==QOIP_ENTROPY_ZSTD_DICTIONARY) {
-			if(!qoip_dic) {
-				FILE *io = fopen("dictionary", "rb");
-				if(!io)
-					return qoip_ret(1, stdout, "qoip_entropy: Failed to open dictionary\n");
-				qoip_dic=malloc(qoip_dic_cnt);
-				if(!qoip_dic)
-					return qoip_ret(1, stdout, "qoip_entropy: Failed to malloc dictionary\n");
-				if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt)
-					return qoip_ret(1, stdout, "qoip_entropy: Failed to load dictionary\n");
-				fclose(io);
-			}
 			ZSTD_DCtx* const dctx = ZSTD_createDCtx();
+			qoip_dic_load();
 			if(ZSTD_isError(ZSTD_decompress_usingDict(dctx, scratch, desc->raw_cnt, q->in + q->p, desc->entropy_cnt, qoip_dic, qoip_dic_cnt)))
 				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
 			ZSTD_freeDCtx(dctx);
