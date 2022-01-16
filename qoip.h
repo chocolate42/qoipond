@@ -84,17 +84,9 @@ typedef uint64_t u64;
 extern "C" {
 #endif
 
-/* A pointer to a qoip_desc struct has to be supplied to all of qoip's functions.
-It describes either the input format (for qoip_encode), or is
-filled with the description read from the file header (for qoip_decode).*/
-
-/* The colorspace in this qoip_desc is an enum where
-	0 = sRGB, i.e. gamma scaled RGB channels and a linear alpha channel
-	1 = all channels are linear
-The colorspace is purely informative. It will be saved to the file header, but
-does not affect en-/decoding in any way. */
+/* Colorspace is saved to the file header, but is purely informative */
 enum{QOIP_SRGB, QOIP_LINEAR};
-
+/* Entropy coding can optionally be used within the file format */
 enum{QOIP_ENTROPY_NONE, QOIP_ENTROPY_LZ4, QOIP_ENTROPY_ZSTD, QOIP_ENTROPY_ZSTD_DICTIONARY};
 
 #define QOIP_OPCNT(id)   (1<<(7-((id)>>5)))
@@ -113,27 +105,24 @@ enum{
 	OP_END
 };
 
+/* This struct is supplied to encode/decode to read/write i/o metadata */
 typedef struct {
-	u32 width;
-	u32 height;
-	u8 channels;
-	u8 colorspace;
-	u64 raw_cnt;
-	u64 entropy_cnt;
+	u32 width, height;
+	u8 channels, colorspace;
+	u64 raw_cnt, entropy_cnt;
 	int entropy;
 } qoip_desc;
 
-/* Decode a QOIP image from memory. The function either returns 1 on failure
-(invalid parameters) or 0 on sucess. On success, the qoip_desc struct is filled
+/* Encode/decode functions assume out is large enough (see maxsize functions) */
+/* Decode a QOIP image from memory. The function either returns >0 on failure
+(invalid parameters) or 0 on success. On success, the qoip_desc struct is filled
 with the description from the file header. */
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out, void *scratch);
 
 /* Encode raw RGB or RGBA pixels into a QOIP image in memory. The function either
-returns 1 on failure (invalid parameters) or 0 on success. On success out is the
-encoded data, out_len is its size in bytes. out is assumed to be large enough to
-hold the encoded data (see qoip_maxsize()). opcode_string is an optional string
-defining the opcode combination to use. It is up to the caller to ensure this
-string is valid, NULL is allowed which means the encoder uses the default combination. */
+returns >0 on failure or 0 on success. On success out is the encoded data, out_len
+is its size in bytes. opcode_string defines the opcode combination to use. It is up
+to the caller to ensure this string is valid */
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string, int entropy, void *scratch);
 
 /* Return the maximum size of a no-entropy-coding QOIP image with dimensions in desc */
@@ -163,7 +152,7 @@ int qoip_skip_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc 
 /* Print s to io and return ret, typically used to print error and return error code */
 int qoip_ret(int ret, FILE *io, char *s);
 
-/* Print opcode layout from a QOIP header */
+/* Print details from a QOIP file */
 int qoip_stat(const void *encoded, FILE *io);
 
 #ifdef __cplusplus
@@ -176,8 +165,7 @@ int qoip_stat(const void *encoded, FILE *io);
 #include "lz4.h"
 #include "zstd.h"
 
-/* Defines which set an op belongs to. The order of this enum determines
-the order ops are sorted for encode/decode. Modify with caution. */
+/* Defines which set an op belongs to. Order matters, do not alter */
 enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4};
 
 typedef union {
@@ -185,7 +173,7 @@ typedef union {
 	u32 v;
 } qoip_rgba_t;
 
-/* All working variables needed by a single encode/decode run */
+/* Working state of an encode/decode run */
 typedef struct {
 	size_t bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
 	int channels, hash, run, run1_len, run2_len, index1_maxval;
@@ -193,8 +181,8 @@ typedef struct {
 	const unsigned char *in;
 	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
 	i8 vr, vg, vb, va;/*Difference from previous */
-	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/*Difference from average*/
-	u8 run1_opcode, run2_opcode, rgb_opcode, rgba_opcode;
+	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/* Difference from average */
+	u8 run1_opcode, run2_opcode, rgb_opcode, rgba_opcode;/* Implicit opcodes */
 } qoip_working_t;
 
 /* Master opcode definitions */
@@ -265,14 +253,12 @@ static inline void qoip_memcpy(void *d, void *s, size_t len) {
 	for(i=0;i<len;++i)
 		((char*)d)[i]=((char*)s)[i];
 }
-
 static inline void qoip_opcode_swap(qoip_opcode_t *a, qoip_opcode_t *b) {
 	qoip_opcode_t t;
 	qoip_memcpy(&t, a, sizeof(qoip_opcode_t));
 	qoip_memcpy(a, b, sizeof(qoip_opcode_t));
 	qoip_memcpy(b, &t, sizeof(qoip_opcode_t));
 }
-
 /* Bad sort algorithm but set is tiny so it's fine */
 static inline void qoip_sort_set(qoip_opcode_t *ops, int op_cnt) {
 	int i, j;
@@ -336,7 +322,6 @@ int qoip_skip_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc 
 		if(bytes[loc])/* Padding non-zero */
 			return 1;
 	}
-
 	if (p)
 		*p = loc;
 	return desc->width == 0 || desc->height == 0 || version || cnt == 0;
@@ -402,7 +387,7 @@ void qoip_write_file_header(unsigned char *bytes, size_t *p, const qoip_desc *de
 	qoip_write_32(bytes, p, QOIP_MAGIC);
 	bytes[(*p)++] = desc->channels;
 	bytes[(*p)++] = desc->colorspace;
-	bytes[(*p)++] = 0;/*entropy coding, 0 placeholder for this non-streaming implementation*/
+	bytes[(*p)++] = 0;/*entropy coding, 0 placeholder non-streaming implementation*/
 	bytes[(*p)++] = 0;/*padding*/
 	for(i=0;i<8;++i)/*size placeholder*/
 		bytes[(*p)++] = 0;
@@ -437,15 +422,14 @@ size_t qoip_maxsize_raw(const qoip_desc *desc, int channels) {
 }
 
 /* Parse an ascii char as a hex value, return -1 on failure */
-static inline int qoip_valid_char(u8 chr) {
+static inline int qoip_valid_hex(u8 chr) {
 	if(chr>='0' && chr<='9')
 		return chr - '0';
 	else if(chr>='a' && chr<='f')
 		return 10 + chr - 'a';
 	else if(chr>='A' && chr<='F')
 		return 10 + chr - 'A';
-	else
-		return -1;
+	return -1;
 }
 
 static inline const opdef_t* qoip_op_lookup(u8 id) {
@@ -463,13 +447,12 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 	int opcodes_present[OP_END] = {0};
 	const opdef_t *opdef;
 	for(; opstr[i] && opstr[i]!=','; ++i) {
-		num = qoip_valid_char(opstr[i]);
-		if(num == -1)
+		if((num = qoip_valid_hex(opstr[i])) == -1)
 			return 1;/* First char failed the number test */
 		++i;
-		if(qoip_valid_char(opstr[i]) == -1)
+		if(qoip_valid_hex(opstr[i]) == -1)
 			return 2;/* Second char failed the number test */
-		num = (num<<4) | qoip_valid_char(opstr[i]);
+		num = (num<<4) | qoip_valid_hex(opstr[i]);
 		if(num>=OP_END)
 			return 3;/* Invalid, beyond last valid id */
 		++opcodes_present[num];
@@ -533,12 +516,10 @@ static inline void qoip_encode_run(qoip_working_t *q) {
 	if(q->run>q->run1_len) {
 		q->out[q->p++] = q->run2_opcode;
 		q->out[q->p++] = (q->run - 1) - q->run1_len;
-		q->run = 0;
 	}
-	else if(q->run) {
+	else if(q->run)
 		q->out[q->p++] = q->run1_opcode + (q->run - 1);
-		q->run = 0;
-	}
+	q->run = 0;
 }
 
 int qoip_ret(int ret, FILE *io, char *s) {
@@ -573,7 +554,7 @@ size_t qoip_maxentropysize(size_t src, int entropy) {
 	}
 }
 
-//temporarily implement a dictionary as global nonsense for testing
+/*temporarily implement a dictionary as global nonsense for testing*/
 static char qoip_dic[112640];
 static size_t qoip_dic_cnt=112640;
 static int qoip_dic_loaded=0;
@@ -590,8 +571,8 @@ static int qoip_dic_load() {
 	}
 	return 0;
 }
-/* Bolted-on entropy encoding implementation, this way it can be reused by
-qoipcrunch_encode */
+
+/* Bolted-on entropy encoding implementation, this way it can be reused */
 static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) {
 	unsigned char *ptr = (unsigned char*)out;
 	int ret;
@@ -628,13 +609,13 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 		return qoip_ret(7, stdout, "qoip_entropy: Requested entropy coding unknown, update encoder?");
 
 	if(dst_cnt<src_cnt) {
-		for(p=loc_bitstream-1;p>=loc_bithead;--p)/*Shift bitstream header to make room for entropy_cnt*/
+		for(p=loc_bitstream-1;p>=loc_bithead;--p)/*Shift bitstream header for entropy_cnt*/
 			ptr[p+8] = ptr[p];
 		qoip_write_64(ptr+loc_bithead, dst_cnt);
 		for(p=0;p<dst_cnt;++p)
 			ptr[loc_bitstream + 8 + p] = ((unsigned char *)scratch)[p];
 		p = loc_bitstream + 8 + dst_cnt;
-		for(;p%8;)//EOF padding
+		for(;p%8;)
 			ptr[p++]=0;
 		*out_len = p;
 		ptr[6]=entropy;
@@ -717,9 +698,9 @@ int qoip_fastpath_cnt = 0;/*Disabled for average implementation as it breaks the
 /*Refactor from opstring to bytestring ids when fixing as opstr has been removed*/
 static const qoip_fastpath_t qoip_fastpath[] = {
 	{0}
-	//{"0003080a0b11", qoip_encode_deltax, qoip_decode_deltax},
+	/*{"0003080a0b11", qoip_encode_deltax, qoip_decode_deltax},
 	//{"0001060a0f", qoip_encode_idelta, qoip_decode_idelta},
-	//{"03070a0d0f", qoip_encode_propc, qoip_decode_propc},
+	//{"03070a0d0f", qoip_encode_propc, qoip_decode_propc},*/
 };
 
 static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int op_cnt) {
