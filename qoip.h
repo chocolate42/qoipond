@@ -584,7 +584,7 @@ static int qoip_dic_load() {
 		if(!io)
 			return qoip_ret(1, stdout, "qoip_entropy: Failed to open dictionary\n");
 		if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt)
-			return qoip_ret(1, stdout, "qoip_entropy: Failed to load dictionary\n");
+			return qoip_ret(2, stdout, "qoip_entropy: Failed to load dictionary\n");
 		fclose(io);
 		qoip_dic_loaded=1;
 	}
@@ -594,6 +594,7 @@ static int qoip_dic_load() {
 qoipcrunch_encode */
 static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) {
 	unsigned char *ptr = (unsigned char*)out;
+	int ret;
 	size_t p = 0, src_cnt, dst_cnt, loc_bithead, loc_bitstream;
 	ZSTD_CCtx *cctx;
 	qoip_desc d;
@@ -604,26 +605,27 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 	src_cnt = *out_len - p;
 	if(entropy==QOIP_ENTROPY_LZ4) {
 		if(src_cnt > LZ4_MAX_INPUT_SIZE)
-			return qoip_ret(1, stdout, "qoip_entropy: Data too big for LZ4, not using entropy (use external LZ4 instead and bug maintainer to implement the advanced API)\n");
+			return qoip_ret(3, stdout, "qoip_entropy: Data too big for LZ4, not using entropy (use external LZ4 instead and bug maintainer to implement the advanced API)\n");
 		dst_cnt = LZ4_compress_default((char *)ptr+p, scratch, src_cnt, LZ4_compressBound(src_cnt));
 		if(dst_cnt==0)
-			return qoip_ret(1, stdout, "qoip_entropy: LZ4 compression failed\n");
+			return qoip_ret(4, stdout, "qoip_entropy: LZ4 compression failed\n");
 	}
 	else if(entropy==QOIP_ENTROPY_ZSTD) {
 		dst_cnt = ZSTD_compress(scratch, ZSTD_compressBound(src_cnt), ptr+p, src_cnt, 19);
 		if(ZSTD_isError(dst_cnt))
-			return qoip_ret(1, stdout, "qoip_entropy: ZSTD compression failed\n");
+			return qoip_ret(5, stdout, "qoip_entropy: ZSTD compression failed\n");
 	}
 	else if(entropy==QOIP_ENTROPY_ZSTD_DICTIONARY) {
 		cctx = ZSTD_createCCtx();
-		qoip_dic_load();
+		if((ret=qoip_dic_load()))
+			return ret;
 		dst_cnt = ZSTD_compress_usingDict(cctx, scratch, ZSTD_compressBound(src_cnt), ptr+p, src_cnt, qoip_dic, qoip_dic_cnt, 19);
 		ZSTD_freeCCtx(cctx);
 		if(ZSTD_isError(dst_cnt))
-			return qoip_ret(1, stdout, "qoip_entropy: ZSTD dictionary compression failed\n");
+			return qoip_ret(6, stdout, "qoip_entropy: ZSTD dictionary compression failed\n");
 	}
 	else
-		return qoip_ret(1, stdout, "qoip_entropy: Requested entropy coding unknown, update encoder?");
+		return qoip_ret(7, stdout, "qoip_entropy: Requested entropy coding unknown, update encoder?");
 
 	if(dst_cnt<src_cnt) {
 		for(p=loc_bitstream-1;p>=loc_bithead;--p)/*Shift bitstream header to make room for entropy_cnt*/
@@ -651,11 +653,11 @@ int qoip_stat(const void *encoded, FILE *io) {
 	const unsigned char *bytes = (const unsigned char *) encoded;
 
 	if(qoip_read_file_header(bytes, &p, &desc))
-		return qoip_ret(1, stderr, "qoip_stat: Failed to read file header");
+		return qoip_ret(8, stderr, "qoip_stat: Failed to read file header");
 	if(qoip_read_bitstream_header(bytes, &p, &desc, ops, &op_cnt))
-		return qoip_ret(1, stderr, "qoip_stat: Failed to read bitstream header");
+		return qoip_ret(9, stderr, "qoip_stat: Failed to read bitstream header");
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
-		return qoip_ret(1, stderr, "qoip_stat: Failed to expand opstring");
+		return qoip_ret(10, stderr, "qoip_stat: Failed to expand opstring");
 
 	fprintf(io, "Width: %6"PRIu32"\n", desc.width);
 	fprintf(io, "Height:%6"PRIu32"\n", desc.height);
@@ -689,7 +691,7 @@ int qoip_stat(const void *encoded, FILE *io) {
 	for(i=0; i<op_cnt; ++i) {
 		opdef = qoip_op_lookup(ops[i].id);
 		if(!opdef)
-			return qoip_ret(1, stderr, "qoip_stat: Invalid opcode");
+			return qoip_ret(11, stderr, "qoip_stat: Invalid opcode");
 		fprintf(io, "%s\n", opdef->desc);
 	}
 	fprintf(io, "OP_RGB\n");
@@ -787,16 +789,16 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		desc->width == 0 || desc->height == 0 ||
 		desc->channels < 3 || desc->channels > 4 || desc->colorspace > 1
 	)
-		return qoip_ret(1, stderr, "qoip_encode: Bad arguments");
+		return qoip_ret(12, stderr, "qoip_encode: Bad arguments");
 	if (entropy && !scratch)
-		return qoip_ret(1, stderr, "qoip_encode: Scratch space needs to be provided for entropy encoding");
+		return qoip_ret(13, stderr, "qoip_encode: Scratch space needs to be provided for entropy encoding");
 
 	if(opstring == NULL || *opstring==0)
 		opstring = "e04002246263";/*L232B + I5 ...*/
 	if(parse_opstring(opstring, ops, &op_cnt))
-		return qoip_ret(1, stderr, "qoip_encode: Failed to parse opstring");
+		return qoip_ret(14, stderr, "qoip_encode: Failed to parse opstring");
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
-		return qoip_ret(1, stderr, "qoip_encode: Failed to expand opstring");
+		return qoip_ret(15, stderr, "qoip_encode: Failed to expand opstring");
 	qoip_write_file_header(q->out, &(q->p), desc);
 	qoip_write_bitstream_header(q->out, &q->p, desc, ops, op_cnt);
 
@@ -908,7 +910,7 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out, void *scratch) {
 	char opstr[513] = {0};
-	int i, op_cnt;
+	int i, op_cnt, ret;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];
@@ -921,37 +923,38 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 		(channels != 0 && channels != 3 && channels != 4) ||
 		data_len < QOIP_FILE_HEADER_SIZE
 	)
-		return qoip_ret(1, stderr, "qoip_decode: Bad arguments");
+		return qoip_ret(16, stderr, "qoip_decode: Bad arguments");
 
 	if(qoip_read_file_header(q->in, &(q->p), desc))
-		return qoip_ret(1, stderr, "qoip_decode: Failed to read file header");
+		return qoip_ret(17, stderr, "qoip_decode: Failed to read file header");
 	if(qoip_read_bitstream_header(q->in, &(q->p), desc, ops, &op_cnt))
-		return qoip_ret(1, stderr, "qoip_decode: Failed to read bitstream header");
+		return qoip_ret(18, stderr, "qoip_decode: Failed to read bitstream header");
 	for(i=0;i<op_cnt;++i)
 		sprintf(opstr+(2*i), "%02x", ops[i].id);
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
-		return qoip_ret(1, stderr, "qoip_decode: Failed to expand opstring");
+		return qoip_ret(19, stderr, "qoip_decode: Failed to expand opstring");
 
 	if(desc->entropy) {
 		if(!scratch)
-			return qoip_ret(1, stderr, "qoip_decode: Scratch space needs to be provided for entropy decoding");
+			return qoip_ret(20, stderr, "qoip_decode: Scratch space needs to be provided for entropy decoding");
 		if(desc->entropy==QOIP_ENTROPY_LZ4) {
 			if(LZ4_decompress_safe((char *)q->in + q->p, (char *)scratch, desc->entropy_cnt, desc->raw_cnt)!=desc->raw_cnt)
-				return qoip_ret(1, stderr, "qoip_decode: LZ4 decode failed");
+				return qoip_ret(21, stderr, "qoip_decode: LZ4 decode failed");
 		}
 		else if(desc->entropy==QOIP_ENTROPY_ZSTD) {
 			if(ZSTD_isError(ZSTD_decompress(scratch, desc->raw_cnt, q->in + q->p, desc->entropy_cnt)))
-				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
+				return qoip_ret(22, stderr, "qoip_decode: ZSTD decode failed");
 		}
 		else if(desc->entropy==QOIP_ENTROPY_ZSTD_DICTIONARY) {
 			ZSTD_DCtx* const dctx = ZSTD_createDCtx();
-			qoip_dic_load();
+			if((ret=qoip_dic_load()))
+				return ret;
 			if(ZSTD_isError(ZSTD_decompress_usingDict(dctx, scratch, desc->raw_cnt, q->in + q->p, desc->entropy_cnt, qoip_dic, qoip_dic_cnt)))
-				return qoip_ret(1, stderr, "qoip_decode: ZSTD decode failed");
+				return qoip_ret(23, stderr, "qoip_decode: ZSTD decode failed");
 			ZSTD_freeDCtx(dctx);
 		}
 		else
-			return qoip_ret(1, stderr, "qoip_decode: Unknown entropy coding, update decoder?");
+			return qoip_ret(24, stderr, "qoip_decode: Unknown entropy coding, update decoder?");
 		q->p = 0;
 		q->in = scratch;
 	}
