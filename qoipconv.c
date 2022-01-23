@@ -43,6 +43,8 @@ SOFTWARE.
 #include "qoipconv-opt.h"
 
 #include <stdio.h>
+#include <stddef.h>
+#include <inttypes.h>
 
 /* Encode raw RGB or RGBA pixels into a QOIP image and write it to the file
 system. The qoip_desc struct must be filled with the image width, height,
@@ -68,24 +70,29 @@ void *qoip_read(const char *filename, qoip_desc *desc, int channels);
 	#define QOIP_FREE(p)    free(p)
 #endif
 
-size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc *desc, char *effort, int threads, int entropy) {
+size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc *desc, char *effort, int threads, int entropy, int smart) {
 	FILE *f;
 	size_t max_size, size;
 	void *encoded, *scratch;
+	int encode_ret;
 
 	max_size = qoip_maxsize(desc);
 	max_size = max_size < qoip_maxentropysize(max_size, entropy) ? qoip_maxentropysize(max_size, entropy) : max_size;
 	encoded = QOIP_MALLOC(max_size);
 	scratch = QOIP_MALLOC(max_size*threads);
-	if (
-		!encoded || !scratch ||
-		qoipcrunch_encode(data, desc, encoded, &size, effort, NULL, scratch, threads, entropy) ||
-		!(f = fopen(filename, "wb"))
-	) {
+
+	if(smart)
+		encode_ret = qoipcrunch_encode_smart(data, desc, encoded, &size, effort, NULL, scratch, threads, entropy);
+	else
+		encode_ret = qoipcrunch_encode(data, desc, encoded, &size, effort, NULL, scratch, threads, entropy);
+
+	if ( !encoded || !scratch || encode_ret || !(f = fopen(filename, "wb")) ) {
 		QOIP_FREE(encoded);
 		QOIP_FREE(scratch);
 		return 0;
 	}
+	qoip_stat(encoded, stdout);
+	printf("Final size: %zu %d\n", size, smart);
 
 	fwrite(encoded, 1, size, f);
 	fclose(f);
@@ -220,7 +227,7 @@ int main(int argc, char **argv) {
 			.height = h,
 			.channels = channels,
 			.colorspace = QOIP_SRGB
-		}, (opt.custom?opt.custom:effort_level), opt.threads, opt.entropy);
+		}, (opt.custom?opt.custom:effort_level), opt.threads, opt.entropy, opt.smart);
 	}
 
 	if (!encoded) {

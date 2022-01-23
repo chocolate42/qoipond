@@ -9,12 +9,12 @@
 
 /* === Hash cache index functions */
 /* This function encodes all index1_* ops */
-static int qoip_sim_index(qoip_working_t *q) {
+int qoip_sim_index(qoip_working_t *q) {
 	if (q->index[q->hash & q->index1_maxval].v == q->px.v)
 		return 1;
 	return 0;
 }
-static int qoip_enc_index(qoip_working_t *q, u8 opcode) {
+int qoip_enc_index(qoip_working_t *q, u8 opcode) {
 	int index_pos = q->hash & q->index1_maxval;
 	if (q->index[index_pos].v == q->px.v) {
 		q->out[q->p++] = opcode | index_pos;
@@ -23,16 +23,16 @@ static int qoip_enc_index(qoip_working_t *q, u8 opcode) {
 	q->index[index_pos] = q->px;
 	return 0;
 }
-static void qoip_dec_index(qoip_working_t *q) {
+void qoip_dec_index(qoip_working_t *q) {
 	q->px = q->index[q->in[q->p++] & q->index1_maxval];
 }
 
-static int qoip_sim_index8(qoip_working_t *q) {
+int qoip_sim_index8(qoip_working_t *q) {
 	if (q->index2[q->hash].v == q->px.v)
-		return 2;
+		return 1;
 	return 0;
 }
-static int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
+int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
 	if (q->index2[q->hash].v == q->px.v) {
 		q->out[q->p++] = opcode;
 		q->out[q->p++] = q->hash;
@@ -40,13 +40,13 @@ static int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_index8(qoip_working_t *q) {
+void qoip_dec_index8(qoip_working_t *q) {
 	++q->p;
 	q->px = q->index2[q->in[q->p++]];
 }
 
 /* === Length 1 RGB delta functions */
-static int qoip_sim_delta(qoip_working_t *q) {
+int qoip_sim_delta(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_r > -2 && q->avg_r < 2 &&
@@ -61,7 +61,7 @@ static int qoip_sim_delta(qoip_working_t *q) {
 		return 1;
 	return 0;
 }
-static int qoip_enc_delta(qoip_working_t *q, u8 opcode) {
+int qoip_enc_delta(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_r > -2 && q->avg_r < 2 &&
@@ -80,7 +80,7 @@ static int qoip_enc_delta(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_delta(qoip_working_t *q) {
+void qoip_dec_delta(qoip_working_t *q) {
 	int b1=q->in[q->p++]&31;
 	if(b1<27) {
 		q->px.rgba.r = q->px_ref.rgba.r + ((b1 % 3) - 1);
@@ -93,7 +93,7 @@ static void qoip_dec_delta(qoip_working_t *q) {
 		q->px.rgba.a += (b1 - 29);
 }
 
-static int qoip_sim_diff1_222(qoip_working_t *q) {
+int qoip_sim_diff1_222(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_r > -3 && q->avg_r < 2 &&
@@ -103,7 +103,7 @@ static int qoip_sim_diff1_222(qoip_working_t *q) {
 		return 1;
 	return 0;
 }
-static int qoip_enc_diff1_222(qoip_working_t *q, u8 opcode) {
+int qoip_enc_diff1_222(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_r > -3 && q->avg_r < 2 &&
@@ -115,7 +115,7 @@ static int qoip_enc_diff1_222(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_diff1_222(qoip_working_t *q) {
+void qoip_dec_diff1_222(qoip_working_t *q) {
 	q->px.rgba.r = q->px_ref.rgba.r + ((q->in[q->p] >> 4) & 0x03) - 2;
 	q->px.rgba.g = q->px_ref.rgba.g + ((q->in[q->p] >> 2) & 0x03) - 2;
 	q->px.rgba.b = q->px_ref.rgba.b + ( q->in[q->p]       & 0x03) - 2;
@@ -123,7 +123,7 @@ static void qoip_dec_diff1_222(qoip_working_t *q) {
 }
 
 
-static int qoip_sim_luma1_232_bias(qoip_working_t *q) {
+int qoip_sim_luma1_232_bias(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_g   > -5 && q->avg_g   < 0 &&
@@ -140,7 +140,7 @@ static int qoip_sim_luma1_232_bias(qoip_working_t *q) {
 		return 1;
 	return 0;
 }
-static int qoip_enc_luma1_232_bias(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma1_232_bias(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_g   > -5 && q->avg_g   < 0 &&
@@ -161,7 +161,7 @@ static int qoip_enc_luma1_232_bias(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma1_232_bias(qoip_working_t *q) {
+void qoip_dec_luma1_232_bias(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int vg = ((b1 >> 4) & 7) - 4;
 	q->px.rgba.g = q->px_ref.rgba.g + vg;
@@ -175,7 +175,7 @@ static void qoip_dec_luma1_232_bias(qoip_working_t *q) {
 	}
 }
 
-static int qoip_sim_luma1_232(qoip_working_t *q) {
+int qoip_sim_luma1_232(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_gr > -3 && q->avg_gr < 2 &&
@@ -185,7 +185,7 @@ static int qoip_sim_luma1_232(qoip_working_t *q) {
 		return 1;
 	return 0;
 }
-static int qoip_enc_luma1_232(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma1_232(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_gr > -3 && q->avg_gr < 2 &&
@@ -197,7 +197,7 @@ static int qoip_enc_luma1_232(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma1_232(qoip_working_t *q) {
+void qoip_dec_luma1_232(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int vg = ((b1 >> 4) - 4);
 	q->px.rgba.r = q->px_ref.rgba.r + vg - 2 + ((b1 >> 2) & 0x03);
@@ -206,30 +206,30 @@ static void qoip_dec_luma1_232(qoip_working_t *q) {
 }
 
 /* === Length 2 RGB delta functions */
-static int qoip_sim_luma2_454(qoip_working_t *q) {
+int qoip_sim_luma2_454(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -9 && q->avg_gr <  8 &&
 		q->avg_g   > -17 && q->avg_g   < 16 &&
 		q->avg_gb >  -9 && q->avg_gb <  8
 	)
-		return 2;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma2_454(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma2_454(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -9 && q->avg_gr <  8 &&
 		q->avg_g   > -17 && q->avg_g   < 16 &&
 		q->avg_gb >  -9 && q->avg_gb <  8
 	) {
-		q->out[q->p++] = opcode             | (q->avg_g   + 16);
+		q->out[q->p++] = opcode               | (q->avg_g  + 16);
 		q->out[q->p++] = (q->avg_gr + 8) << 4 | (q->avg_gb +  8);
 		return 1;
 	}
 	return 0;
 }
-static void qoip_dec_luma2_454(qoip_working_t *q) {
+void qoip_dec_luma2_454(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int vg = (b1 & 0x1f) - 16;
@@ -238,17 +238,17 @@ static void qoip_dec_luma2_454(qoip_working_t *q) {
 	q->px.rgba.b = q->px_ref.rgba.b + vg - 8 +  (b2       & 0x0f);
 }
 
-static int qoip_sim_luma2_464(qoip_working_t *q) {
+int qoip_sim_luma2_464(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -9 && q->avg_gr <  8 &&
 		q->avg_g   > -33 && q->avg_g   < 32 &&
 		q->avg_gb >  -9 && q->avg_gb <  8
 	)
-		return 2;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma2_464(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma2_464(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -9 && q->avg_gr <  8 &&
@@ -261,7 +261,7 @@ static int qoip_enc_luma2_464(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma2_464(qoip_working_t *q) {
+void qoip_dec_luma2_464(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int vg = (b1 & 0x3f) - 32;
@@ -271,17 +271,17 @@ static void qoip_dec_luma2_464(qoip_working_t *q) {
 }
 
 /* === Length 3 RGB delta functions */
-static int qoip_sim_luma3_676(qoip_working_t *q) {
+int qoip_sim_luma3_676(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_gr > -33 && q->avg_gr < 32 &&
 		q->avg_g   > -65 && q->avg_g   < 64 &&
 		q->avg_gb > -33 && q->avg_gb < 32
 	)
-		return 3;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma3_676(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma3_676(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_gr > -33 && q->avg_gr < 32 &&
@@ -295,7 +295,7 @@ static int qoip_enc_luma3_676(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma3_676(qoip_working_t *q) {
+void qoip_dec_luma3_676(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
@@ -305,16 +305,16 @@ static void qoip_dec_luma3_676(qoip_working_t *q) {
 	q->px.rgba.b = q->px_ref.rgba.b + vg - 32 + (((b2 & 0x0f) << 2) | ((b3 >> 6) & 0x03));
 }
 
-static int qoip_sim_luma3_686(qoip_working_t *q) {
+int qoip_sim_luma3_686(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -33 && q->avg_gr <  32 &&
 		q->avg_gb >  -33 && q->avg_gb <  32
 	)
-		return 3;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma3_686(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma3_686(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -33 && q->avg_gr <  32 &&
@@ -327,7 +327,7 @@ static int qoip_enc_luma3_686(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma3_686(qoip_working_t *q) {
+void qoip_dec_luma3_686(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
@@ -337,16 +337,16 @@ static void qoip_dec_luma3_686(qoip_working_t *q) {
 	q->px.rgba.g = q->px_ref.rgba.g + vg;
 }
 
-static int qoip_sim_luma3_787(qoip_working_t *q) {
+int qoip_sim_luma3_787(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -65 && q->avg_gr <  64 &&
 		q->avg_gb >  -65 && q->avg_gb <  64
 	)
-		return 3;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma3_787(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma3_787(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
 		q->avg_gr >  -65 && q->avg_gr <  64 &&
@@ -359,7 +359,7 @@ static int qoip_enc_luma3_787(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma3_787(qoip_working_t *q) {
+void qoip_dec_luma3_787(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
@@ -370,7 +370,7 @@ static void qoip_dec_luma3_787(qoip_working_t *q) {
 }
 
 /* === length 1 RGBA delta functions */
-static int qoip_sim_deltaa(qoip_working_t *q) {
+int qoip_sim_deltaa(qoip_working_t *q) {
 	if (
 		(q->va == -1 || q->va == 1) &&
 		q->avg_r > -2 && q->avg_r < 2 &&
@@ -385,7 +385,7 @@ static int qoip_sim_deltaa(qoip_working_t *q) {
 		return 1;
 	return 0;
 }
-static int qoip_enc_deltaa(qoip_working_t *q, u8 opcode) {
+int qoip_enc_deltaa(qoip_working_t *q, u8 opcode) {
 	if (
 		(q->va == -1 || q->va == 1) &&
 		q->avg_r > -2 && q->avg_r < 2 &&
@@ -407,7 +407,7 @@ static int qoip_enc_deltaa(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_deltaa(qoip_working_t *q) {
+void qoip_dec_deltaa(qoip_working_t *q) {
 	int b1=q->in[q->p++];
 	switch(b1&31){
 		case 27:
@@ -433,12 +433,12 @@ static void qoip_dec_deltaa(qoip_working_t *q) {
 }
 
 /* === Length 2 RGBA delta functions */
-static int qoip_sim_a(qoip_working_t *q) {
+int qoip_sim_a(qoip_working_t *q) {
 	if ( q->vr == 0 && q->vg == 0 && q->vb == 0 )
-		return 2;
+		return 1;
 	return 0;
 }
-static int qoip_enc_a(qoip_working_t *q, u8 opcode) {
+int qoip_enc_a(qoip_working_t *q, u8 opcode) {
 	if ( q->vr == 0 && q->vg == 0 && q->vb == 0 ) {
 		q->out[q->p++] = opcode;
 		q->out[q->p++] = q->px.rgba.a;
@@ -446,22 +446,22 @@ static int qoip_enc_a(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_a(qoip_working_t *q) {
+void qoip_dec_a(qoip_working_t *q) {
 	++q->p;
 	q->px.rgba.a = q->in[q->p++];
 }
 
-static int qoip_sim_luma2_3433(qoip_working_t *q) {
+int qoip_sim_luma2_3433(qoip_working_t *q) {
 	if (
 		q->va   >  -5 && q->va   <  4 &&
 		q->avg_gr >  -5 && q->avg_gr <  4 &&
 		q->avg_g   >  -9 && q->avg_g   <  8 &&
 		q->avg_gb >  -5 && q->avg_gb <  4
 	)
-		return 2;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma2_3433(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma2_3433(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va   >  -5 && q->va   <  4 &&
 		q->avg_gr >  -5 && q->avg_gr <  4 &&
@@ -474,7 +474,7 @@ static int qoip_enc_luma2_3433(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma2_3433(qoip_working_t *q) {
+void qoip_dec_luma2_3433(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int vg = (b2 & 0xf) - 8;
@@ -485,17 +485,17 @@ static void qoip_dec_luma2_3433(qoip_working_t *q) {
 }
 
 /* === Length 3 RGBA delta functions */
-static int qoip_sim_luma3_4645(qoip_working_t *q) {
+int qoip_sim_luma3_4645(qoip_working_t *q) {
 	if (
 		q->va   > -17 && q->va   < 16 &&
 		q->avg_gr >  -9 && q->avg_gr <  8 &&
 		q->avg_g   > -33 && q->avg_g   < 32 &&
 		q->avg_gb >  -9 && q->avg_gb <  8
 	)
-		return 3;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma3_4645(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma3_4645(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va   > -17 && q->va   < 16 &&
 		q->avg_gr >  -9 && q->avg_gr <  8 &&
@@ -509,7 +509,7 @@ static int qoip_enc_luma3_4645(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma3_4645(qoip_working_t *q) {
+void qoip_dec_luma3_4645(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
@@ -520,17 +520,17 @@ static void qoip_dec_luma3_4645(qoip_working_t *q) {
 	q->px.rgba.a += (b2 & 0x1f) - 16;
 }
 
-static int qoip_sim_luma3_5654(qoip_working_t *q) {
+int qoip_sim_luma3_5654(qoip_working_t *q) {
 	if (
 		q->va   >  -9 && q->va    < 8 &&
 		q->avg_gr > -17 && q->avg_gr < 16 &&
 		q->avg_g   > -33 && q->avg_g   < 32 &&
 		q->avg_gb > -17 && q->avg_gb < 16
 	)
-		return 3;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma3_5654(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma3_5654(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va   >  -9 && q->va    < 8 &&
 		q->avg_gr > -17 && q->avg_gr < 16 &&
@@ -544,7 +544,7 @@ static int qoip_enc_luma3_5654(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma3_5654(qoip_working_t *q) {
+void qoip_dec_luma3_5654(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
@@ -556,17 +556,17 @@ static void qoip_dec_luma3_5654(qoip_working_t *q) {
 }
 
 /* === Length 4 RGBA delta functions */
-static int qoip_sim_luma4_7777(qoip_working_t *q) {
+int qoip_sim_luma4_7777(qoip_working_t *q) {
 	if (
 		q->va   > -65 && q->va   < 64 &&
 		q->avg_gr > -65 && q->avg_gr < 64 &&
 		q->avg_g   > -65 && q->avg_g   < 64 &&
 		q->avg_gb > -65 && q->avg_gb < 64
 	)
-		return 4;
+		return 1;
 	return 0;
 }
-static int qoip_enc_luma4_7777(qoip_working_t *q, u8 opcode) {
+int qoip_enc_luma4_7777(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va   > -65 && q->va   < 64 &&
 		q->avg_gr > -65 && q->avg_gr < 64 &&
@@ -581,7 +581,7 @@ static int qoip_enc_luma4_7777(qoip_working_t *q, u8 opcode) {
 	}
 	return 0;
 }
-static void qoip_dec_luma4_7777(qoip_working_t *q) {
+void qoip_dec_luma4_7777(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];

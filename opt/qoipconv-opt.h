@@ -14,6 +14,7 @@ typedef struct opt{
 	int effort;
 	int threads;
 	int entropy;
+	int smart;
 	int _mode;
 } opt_t;
 
@@ -38,6 +39,7 @@ int opt_init(opt_t *opt){
 	opt->effort=1;
 	opt->threads=1;
 	opt->entropy=0;
+	opt->smart=0;
 	opt->custom=NULL;
 	opt->in=NULL;
 	opt->out=NULL;
@@ -95,6 +97,10 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			++loc;
 		}
+		else if(strcmp("-smart", argv[loc])==0)
+			opt->smart=1;
+		else if(strcmp("-no-smart", argv[loc])==0)
+			opt->smart=0;
 		else if(strcmp("-license", argv[loc])==0){
 			if(modeset){
 				fprintf(stderr, "Error, multiple modes defined\n");
@@ -167,6 +173,9 @@ int optmode_help(){
 	printf("    Number of threads to use. Default 1\n\n");
 	printf(" -entropy input\n");
 	printf("    Entropy coder to use. 0=none, 1=LZ4, 2=ZSTD (default 0)\n\n");
+	printf(" -smart\n");
+	printf(" -no-smart\n");
+	printf("    Use smart crunch path (overrides custom arg)\n");
 
 	return 0;
 }

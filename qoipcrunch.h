@@ -25,6 +25,7 @@ SOFTWARE.
 #define QOIPCRUNCH_H
 #include "qoip.h"
 #include "qoipcrunch-list.h"
+#include "qoip-func.h"
 #include <assert.h>
 #include <inttypes.h>
 #include <stddef.h>
@@ -46,6 +47,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 #include <omp.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 static void qoipcrunch_update_stats(size_t *currbest_len, char *currbest_str, size_t *candidate_len, char *candidate_str) {
 	size_t len;
@@ -71,6 +73,24 @@ typedef struct {
 
 #define QOIP_MAX_THREADS 64
 
+static int qoip_effortlevel(char *effort) {
+	if(     strcmp(effort, "0")==0 || !effort)
+		return 0;
+	else if(strcmp(effort, "1")==0)
+		return 1;
+	else if(strcmp(effort, "2")==0)
+		return 2;
+	else if(strcmp(effort, "3")==0)
+		return 3;
+	else if(strcmp(effort, "4")==0)
+		return 4;
+	else if(strcmp(effort, "5")==0)
+		return 5;
+	else if(strcmp(effort, "6")==0)
+		return 6;
+	return -1;
+}
+
 /* Scratch is assumed big enough to house all working memory encodings, aka
 threads * qoip_maxsize(desc)
 */
@@ -88,20 +108,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 	currbest_len = qoip_maxsize(desc);
 
-	if(     strcmp(effort, "0")==0 || !effort)
-		level=0;
-	else if(strcmp(effort, "1")==0)
-		level=1;
-	else if(strcmp(effort, "2")==0)
-		level=2;
-	else if(strcmp(effort, "3")==0)
-		level=3;
-	else if(strcmp(effort, "4")==0)
-		level=4;
-	else if(strcmp(effort, "5")==0)
-		level=5;
-	else if(strcmp(effort, "6")==0)
-		level=6;
+	level = qoip_effortlevel(effort);
 
 	assert(scratch);
 
@@ -180,5 +187,279 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		qoip_entropy(out, out_len, tmp, entropy);
 	return 0;
 }
+
+typedef struct {
+	u8 code;
+	int (*sim)(qoip_working_t *);
+	int len;
+} qoip_sim_t;
+
+qoip_sim_t diff_ops[] = {
+	{OP_LUMA1_232B, qoip_sim_luma1_232_bias, 1},
+	{OP_LUMA1_232, qoip_sim_luma1_232, 1},
+	{OP_DELTAA, qoip_sim_deltaa, 1},
+	{OP_DIFF1_222, qoip_sim_diff1_222, 1},
+	{OP_LUMA2_464, qoip_sim_luma2_464, 2},
+	{OP_LUMA3_787, qoip_sim_luma3_787, 3},
+	{OP_DELTA, qoip_sim_delta, 1},
+	{OP_LUMA2_454, qoip_sim_luma2_454, 2},
+	{OP_LUMA2_3433, qoip_sim_luma2_3433, 2},
+	{OP_LUMA3_686, qoip_sim_luma3_686, 3},
+	{OP_LUMA3_5654, qoip_sim_luma3_5654, 3},
+	{OP_LUMA4_7777, qoip_sim_luma4_7777, 4},
+	{OP_LUMA3_676, qoip_sim_luma3_676, 3},
+	{OP_LUMA3_4645, qoip_sim_luma3_4645, 3},
+	{OP_A, qoip_sim_a, 2},
+	/*index ops, sim code unused so NULL*/
+	{OP_INDEX3, NULL, 1},
+	{OP_INDEX4, NULL, 1},
+	{OP_INDEX5, NULL, 1},
+	{OP_INDEX6, NULL, 1},
+	{OP_INDEX7, NULL, 1},
+	{OP_INDEX8, NULL, 2},
+	};
+int diff_ops_cnt=15;
+int total_ops_cnt = 21;
+
+typedef struct {
+	u64 length_masks[4];
+	u8 op[16];
+	int op_cnt, best_index, run1, run2;
+	size_t best_cnt;
+} thread_sim_t;
+
+/* Convert a known-good opstring to a byte array */
+static void opstring_to_bytes(char *opstring, u8 *bytes, int *bytes_cnt) {
+	*bytes_cnt=0;
+	for(*bytes_cnt=0; opstring[2*(*bytes_cnt)]; ++*bytes_cnt)
+		bytes[*bytes_cnt] = (qoip_valid_hex(opstring[2*(*bytes_cnt)])<<4) + qoip_valid_hex(opstring[(2*(*bytes_cnt))+1]);
+}
+
+static inline size_t qoip_sim_run(int run1_len, int run2_len, size_t run) {
+	size_t ret = 0;
+	for(; run>=run2_len; run-=run2_len)
+		ret += 2;
+	if(run>run1_len)
+		ret += 2;
+	else if(run)
+		++ret;
+	return ret;
+}
+
+int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *scratch, int threads, int entropy) {
+	int best_index, i, level;
+	qoip_working_t qq = {0};
+	qoip_working_t *q = &qq;
+	size_t *run=NULL;
+	size_t run_cnt=0, run_cap=0;
+	u64 *stat=NULL;
+	size_t stat_cnt=0;
+	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0};
+	qoip_rgba_t *indexes[6] = {index3, index4, index5, index6, index7, index8};
+	int indexes_mask[6] = {7, 15, 31, 63, 127, 255};
+	thread_sim_t tmem[1]={0};
+
+	q->in = (const unsigned char *)data;
+
+	if ( data == NULL || desc == NULL || out == NULL || out_len == NULL ||
+		desc->width == 0 || desc->height == 0 ||
+		desc->channels < 3 || desc->channels > 4 || desc->colorspace > 1 )
+		return qoip_ret(1, stderr, "qoip_smart: Bad arguments");
+
+	level = qoip_effortlevel(effort);
+
+	q->px.v = 0;
+	q->px.rgba.a = 255;
+	q->width = desc->width;
+	q->height = desc->height;
+	q->channels = desc->channels;
+	q->stride = desc->width * desc->channels;
+	q->upcache[0]=0;
+	q->upcache[1]=0;
+	q->upcache[2]=0;
+	for(i=0;i<(desc->width<8192?desc->width-1:8191);++i) {/* Prefill upcache */
+		q->upcache[((i+1)*3)+0]=q->in[(i*desc->channels)+0];
+		q->upcache[((i+1)*3)+1]=q->in[(i*desc->channels)+1];
+		q->upcache[((i+1)*3)+2]=q->in[(i*desc->channels)+2];
+	}
+
+	/* Stat pass */
+	stat = calloc(desc->width*desc->height, sizeof(u64));
+	assert(stat);
+	q->px_pos = 0;
+	for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+		for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+			q->px_prev.v = q->px.v;
+			if(q->channels==4)
+				q->px = *(qoip_rgba_t *)(q->in + q->px_pos);
+			else {
+				q->px.rgba.r = q->in[q->px_pos + 0];
+				q->px.rgba.g = q->in[q->px_pos + 1];
+				q->px.rgba.b = q->in[q->px_pos + 2];
+			}
+			if (q->px.v == q->px_prev.v)
+				++q->run;/* Accumulate as much RLE as there is */
+			else {
+				if(q->run) {
+					if(run_cnt==run_cap) {
+						run_cap += 1024;
+						run = realloc(run, sizeof(size_t)*run_cap);
+						assert(run);
+					}
+					run[run_cnt++] = q->run;
+					q->run = 0;
+				}
+				/* generate variables that may be needed by ops */
+				if (q->px_w<8192) {
+					q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0]+1) >> 1;
+					q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1]+1) >> 1;
+					q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2]+1) >> 1;
+				}
+				else
+					q->px_ref.v = q->px_prev.v;
+				q->hash = QOIP_COLOR_HASH(q->px) & 255;
+				q->vr = q->px.rgba.r - q->px_prev.rgba.r;
+				q->vg = q->px.rgba.g - q->px_prev.rgba.g;
+				q->vb = q->px.rgba.b - q->px_prev.rgba.b;
+				q->va = q->px.rgba.a - q->px_prev.rgba.a;
+				q->avg_r = q->px.rgba.r - q->px_ref.rgba.r;
+				q->avg_g = q->px.rgba.g - q->px_ref.rgba.g;
+				q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
+				q->avg_gr = q->avg_r - q->avg_g;
+				q->avg_gb = q->avg_b - q->avg_g;
+				/* Gather stats */
+				stat[stat_cnt] = 0;
+				for(i=0;i<diff_ops_cnt;++i)/*Diff/Luma/Delta*/
+					stat[stat_cnt] |= (diff_ops[i].sim(q) << i);
+				for(;i<total_ops_cnt;++i) {/*hash index*/
+					if(indexes[i-diff_ops_cnt][q->hash & indexes_mask[i-diff_ops_cnt]].v == q->px.v)
+						stat[stat_cnt] |= (1 << i);
+					indexes[i-diff_ops_cnt][q->hash & indexes_mask[i-diff_ops_cnt]] = q->px;
+				}
+				if(q->va==0)
+					stat[stat_cnt] |= (1 << i);//OP_RGB
+				++stat_cnt;
+			}
+			if(q->px_w<8192) {
+				q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
+				q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
+				q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
+			}
+			q->px_pos += desc->channels;
+		}
+	}
+	if(q->run) {/* Cap off ending run if present*/
+		if(run_cnt==run_cap) {
+			run_cap += 1024;
+			run = realloc(run, sizeof(size_t)*run_cap);
+			assert(run);
+		}
+		run[run_cnt++] = q->run;
+		q->run = 0;
+	}
+
+	/* Processing pass */
+	//OpenMP TODO
+	/*init working mem*/
+	tmem[0].best_cnt=-1;
+	tmem[0].best_index=-1;
+	for(i=0;i<(1<<level);++i) {
+	//for(i=0;i<1;++i) {
+		//size_t chk_run=0;
+		size_t k, m, curr=0;
+		const opdef_t *ret;
+		opstring_to_bytes(qoipcrunch_unified[i], tmem[0].op, &(tmem[0].op_cnt));
+		/* run handling */
+		tmem[0].run1=253;
+		for(k=0;k<tmem[0].op_cnt;++k)
+			tmem[0].run1 -= QOIP_OPCNT(tmem[0].op[k]);
+		assert(tmem[0].run1>=0);
+		tmem[0].run2=tmem[0].run1 + 256;
+		//printf("run1 %d run2 %d\n", tmem[0].run1, tmem[0].run2);
+		//for(k=0;k<run_cnt;++k)
+		//	curr += qoip_sim_run(tmem[0].run1, tmem[0].run2, run[k]);
+		//printf("%zu runs took %zu bytes\n", run_cnt, curr);
+		//for(k=0;k<run_cnt;++k)
+		//	chk_run += run[k];
+		//printf("Runs handle %zu pixels, leaving %zu non-run pixels\n", chk_run, (desc->width*desc->height)-chk_run);
+		//printf("Non-run pixel stat count: %zu\n", stat_cnt);
+		/* Build op masks */
+		for(k=0;k<4;++k)
+			tmem[0].length_masks[k]=0;
+		for(k=0;k<tmem[0].op_cnt;++k) {
+			ret = qoip_op_lookup(tmem[0].op[k]);
+			assert(ret);
+			for(m=0;m<total_ops_cnt;++m) {
+				if(tmem[0].op[k] == diff_ops[m].code) {
+					switch(ret->set) {
+						case QOIP_SET_INDEX1:
+						case QOIP_SET_LEN1:
+							tmem[0].length_masks[0] |= (1 << m);
+							break;
+						case QOIP_SET_INDEX2:
+						case QOIP_SET_LEN2:
+							tmem[0].length_masks[1] |= (1 << m);
+							break;
+						case QOIP_SET_LEN3:
+							tmem[0].length_masks[2] |= (1 << m);
+							break;
+						case QOIP_SET_LEN4:
+							tmem[0].length_masks[3] |= (1 << m);
+							break;
+					}
+					break;
+				}
+			}
+		}
+		tmem[0].length_masks[3] |= (1 << total_ops_cnt);/*OP_RGB*/
+		/* Use op masks */
+		for(k=0;k<stat_cnt;++k) {
+			if(     tmem[0].length_masks[0] & stat[k])
+				++curr;
+			else if(tmem[0].length_masks[1] & stat[k])
+				curr+=2;
+			else if(tmem[0].length_masks[2] & stat[k])
+				curr+=3;
+			else if(tmem[0].length_masks[3] & stat[k])
+				curr+=4;
+			else
+				curr+=5;
+		}
+		if(curr<tmem[0].best_cnt) {
+			tmem[0].best_cnt = curr;
+			tmem[0].best_index = i;
+		}
+	}
+	/*aggregate OpenMP*/
+	best_index = tmem[0].best_index;
+	//printf("best index = %d calculated_size = %zu\n", tmem[0].best_index, tmem[0].best_cnt);
+
+	if(stat)
+		free(stat);
+	if(run)
+		free(run);
+
+	return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[best_index], entropy, scratch);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #endif /* QOIPCRUNCH_C */

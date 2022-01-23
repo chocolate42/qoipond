@@ -113,6 +113,36 @@ typedef struct {
 	int entropy;
 } qoip_desc;
 
+/* A raw pixel, exposed for smart crunch function */
+typedef union {
+	struct { u8 r, g, b, a; } rgba;
+	u32 v;
+} qoip_rgba_t;
+
+/* Working state of an encode/decode run, exposed for smart crunch function */
+typedef struct {
+	size_t bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
+	int channels, hash, run, run1_len, run2_len, index1_maxval;
+	unsigned char *out, upcache[8192*3];
+	const unsigned char *in;
+	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
+	i8 vr, vg, vb, va;/*Difference from previous */
+	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/* Difference from average */
+	u8 run1_opcode, run2_opcode, rgb_opcode, rgba_opcode;/* Implicit opcodes */
+} qoip_working_t;
+
+/* Master opcode definitions */
+typedef struct {
+	u8 id, set;
+	char *desc;
+	int (*enc)(qoip_working_t *, u8);
+	void (*dec)(qoip_working_t *);
+	int (*sim)(qoip_working_t *);
+} opdef_t;
+
+/* Defines which set an op belongs to. Order matters, do not alter */
+enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4};
+
 /* Encode/decode functions assume out is large enough (see maxsize functions) */
 /* Decode a QOIP image from memory. The function either returns >0 on failure
 (invalid parameters) or 0 on success. On success, the qoip_desc struct is filled
@@ -155,6 +185,11 @@ int qoip_ret(int ret, FILE *io, char *s);
 /* Print details from a QOIP file */
 int qoip_stat(const void *encoded, FILE *io);
 
+
+/* Parse an ascii char as a hex value, return -1 on failure */
+inline int qoip_valid_hex(u8 chr);
+inline const opdef_t* qoip_op_lookup(u8 id);
+
 #ifdef __cplusplus
 }
 #endif
@@ -165,49 +200,19 @@ int qoip_stat(const void *encoded, FILE *io);
 #include "lz4.h"
 #include "zstd.h"
 
-/* Defines which set an op belongs to. Order matters, do not alter */
-enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LEN3, QOIP_SET_LEN4};
-
-typedef union {
-	struct { u8 r, g, b, a; } rgba;
-	u32 v;
-} qoip_rgba_t;
-
-/* Working state of an encode/decode run */
-typedef struct {
-	size_t bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
-	int channels, hash, run, run1_len, run2_len, index1_maxval;
-	unsigned char *out, upcache[8192*3];
-	const unsigned char *in;
-	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
-	i8 vr, vg, vb, va;/*Difference from previous */
-	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/* Difference from average */
-	u8 run1_opcode, run2_opcode, rgb_opcode, rgba_opcode;/* Implicit opcodes */
-} qoip_working_t;
-
-/* Master opcode definitions */
-typedef struct {
-	u8 id, set;
-	char *desc;
-	int (*enc)(qoip_working_t *, u8);
-	void (*dec)(qoip_working_t *);
-	int (*sim)(qoip_working_t *);
-} opdef_t;
-
 /* Runtime opcodes built from master definitions */
 typedef struct {
 	u8 id, mask, set, opcode, opcnt;
 	int (*enc)(qoip_working_t *, u8);
 	void (*dec)(qoip_working_t *);
-	int (*sim)(qoip_working_t *);
 } qoip_opcode_t;
 
 /* Op encode/decode functions split into qoip-func.c, new_op functions go there */
 #include "qoip-func.c"
 
 /* new_op definitions go here, if qoip_op_lookup remains linear order doesn't matter */
-static int qoip_ops_cnt = 21;
-static const opdef_t qoip_ops[] = {
+int qoip_ops_cnt = 21;
+const opdef_t qoip_ops[] = {
 	{OP_INDEX7,   QOIP_SET_INDEX1, "OP_INDEX7:     1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index, qoip_sim_index},
 	{OP_LUMA1_232B, QOIP_SET_LEN1, "OP_LUMA1_232B: 1 byte delta, OP_LUMA1_232 but with R and B biased depending on direction of G", qoip_enc_luma1_232_bias, qoip_dec_luma1_232_bias, qoip_sim_luma1_232_bias},
 	{OP_LUMA1_232,  QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, (avg_gr  -2..1 , avg_g  -4..3 , avg_gb  -2..1 )", qoip_enc_luma1_232, qoip_dec_luma1_232, qoip_sim_luma1_232},
@@ -422,7 +427,7 @@ size_t qoip_maxsize_raw(const qoip_desc *desc, int channels) {
 }
 
 /* Parse an ascii char as a hex value, return -1 on failure */
-static inline int qoip_valid_hex(u8 chr) {
+inline int qoip_valid_hex(u8 chr) {
 	if(chr>='0' && chr<='9')
 		return chr - '0';
 	else if(chr>='a' && chr<='f')
@@ -432,7 +437,7 @@ static inline int qoip_valid_hex(u8 chr) {
 	return -1;
 }
 
-static inline const opdef_t* qoip_op_lookup(u8 id) {
+inline const opdef_t* qoip_op_lookup(u8 id) {
 	int i;
 	for(i=0;i<qoip_ops_cnt;++i) {
 		if(qoip_ops[i].id==id)
@@ -488,7 +493,6 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 		ops[i].set   = opdef->set;
 		ops[i].enc   = opdef->enc;
 		ops[i].dec   = opdef->dec;
-		ops[i].sim   = opdef->sim;
 		if(ops[i].set==QOIP_SET_INDEX1)
 			q->index1_maxval = ops[i].opcnt - 1;
 	}

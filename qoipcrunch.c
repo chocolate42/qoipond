@@ -102,8 +102,14 @@ int main(int argc, char *argv[]) {
 
 	qoip_decode(opt.in, opt.in_len, &desc, desc.channels, raw, scratch);
 
-	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads, opt.entropy))
-		return 1;
+	if(opt.smart) {
+		if(qoipcrunch_encode_smart(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads, opt.entropy))
+			return 1;
+	}
+	else {
+		if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads, opt.entropy))
+			return 1;
+	}
 
 	if(opt.out) {
 		if(tmp_len<opt.in_len) {

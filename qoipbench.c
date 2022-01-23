@@ -357,14 +357,14 @@ void benchmark_print_result(opt_t *opt, char *effort, benchmark_result_t res) {
 		);
 	}
 	printf(
-			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: qoip(%s).threads(%d).entropy(%d)\n",
+			" %8.3f   %8.3f     %8.2f     %8.2f %8"PRIu64"  %4.1f%%: qoip(%s).threads(%d).entropy(%d).smart(%d)\n",
 		(double)res.qoip.decode_time/1000000.0,
 		(double)res.qoip.encode_time/1000000.0,
 		(res.qoip.decode_time > 0 ? px / ((double)res.qoip.decode_time/1000.0) : 0),
 		(res.qoip.encode_time > 0 ? px / ((double)res.qoip.encode_time/1000.0) : 0),
 		res.qoip.size/1024,
 		((double)res.qoip.size/(double)res.raw_size) * 100.0,
-		effort, opt->threads, opt->entropy
+		effort, opt->threads, opt->entropy, opt->smart
 	);
 	printf("\n");
 }
@@ -415,8 +415,15 @@ benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 	if (!encoded_qoip || !scratch) {
 		ERROR("Error, malloc failed %s", path);
 	}
-	if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &encoded_qoip_size, effort, NULL, scratch, opt->threads, opt->entropy)) {
-		ERROR("Error, qoip_encode failed %s", path);
+	if(opt->smart) {
+		if (qoipcrunch_encode_smart(pixels, &desc_raw, encoded_qoip, &encoded_qoip_size, effort, NULL, scratch, opt->threads, opt->entropy)) {
+			ERROR("Error, qoipcrunch_encode_smart failed %s", path);
+		}
+	}
+	else {
+		if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &encoded_qoip_size, effort, NULL, scratch, opt->threads, opt->entropy)) {
+			ERROR("Error, qoipcrunch_encode failed %s", path);
+		}
 	}
 	if (!pixels || !encoded_qoip || !encoded_png) {
 		ERROR("Error decoding %s", path);
@@ -496,8 +503,15 @@ benchmark_result_t benchmark_image(opt_t *opt, char *effort, const char *path) {
 
 		BENCHMARK_FN(opt->warmup?0:1, opt->iterations, res.qoip.encode_time, {
 			size_t enc_size;
-			if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL, scratch, opt->threads, opt->entropy)) {
-				ERROR("Error, qoip_encode failed %s", path);
+			if(opt->smart) {
+				if (qoipcrunch_encode_smart(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL, scratch, opt->threads, opt->entropy)) {
+					ERROR("Error, qoipcrunch_encode_smart failed %s", path);
+				}
+			}
+			else {
+				if (qoipcrunch_encode(pixels, &desc_raw, encoded_qoip, &enc_size, effort, NULL, scratch, opt->threads, opt->entropy)) {
+					ERROR("Error, qoipcrunch_encode failed %s", path);
+				}
 			}
 			res.qoip.size = enc_size;
 		});

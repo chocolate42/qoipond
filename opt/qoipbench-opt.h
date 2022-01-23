@@ -14,6 +14,7 @@ typedef struct opt{
 	int threads;
 	int entropy;
 	int iterations;
+	int smart;
 	int warmup;
 	int png;
 	int verify;
@@ -46,6 +47,7 @@ int opt_init(opt_t *opt){
 	opt->threads=1;
 	opt->entropy=0;
 	opt->iterations=1;
+	opt->smart=0;
 	opt->warmup=1;
 	opt->png=1;
 	opt->verify=1;
@@ -117,6 +119,10 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			++loc;
 		}
+		else if(strcmp("-smart", argv[loc])==0)
+			opt->smart=1;
+		else if(strcmp("-no-smart", argv[loc])==0)
+			opt->smart=0;
 		else if(strcmp("-warmup", argv[loc])==0)
 			opt->warmup=1;
 		else if(strcmp("-no-warmup", argv[loc])==0)
@@ -217,6 +223,9 @@ int optmode_help(){
 	printf("    Entropy coder to use. 0=none, 1=LZ4, 2=ZSTD (default 0)\n\n");
 	printf(" -iterations input\n");
 	printf("    Number of iterations to try, default 1.\n\n");
+	printf(" -smart\n");
+	printf(" -no-smart\n");
+	printf("    Use smart crunch path (overrides custom arg)\n");
 	printf(" -warmup\n");
 	printf(" -no-warmup\n");
 	printf("    Perform a warmup run (default true)\n");
