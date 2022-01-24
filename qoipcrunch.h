@@ -194,20 +194,22 @@ typedef struct {
 } qoip_sim_t;
 
 qoip_sim_t diff_ops[] = {
-	{OP_LUMA1_232B, qoip_sim_luma1_232_bias, 1},
+	/*LUMA ops */
 	{OP_LUMA1_232, qoip_sim_luma1_232, 1},
-	{OP_DELTAA, qoip_sim_deltaa, 1},
-	{OP_DIFF1_222, qoip_sim_diff1_222, 1},
-	{OP_LUMA2_464, qoip_sim_luma2_464, 2},
-	{OP_LUMA3_787, qoip_sim_luma3_787, 3},
-	{OP_DELTA, qoip_sim_delta, 1},
 	{OP_LUMA2_454, qoip_sim_luma2_454, 2},
-	{OP_LUMA2_3433, qoip_sim_luma2_3433, 2},
+	{OP_LUMA2_464, qoip_sim_luma2_464, 2},
+	{OP_LUMA3_676, qoip_sim_luma3_676, 3},
 	{OP_LUMA3_686, qoip_sim_luma3_686, 3},
+	{OP_LUMA3_787, qoip_sim_luma3_787, 3},
+	{OP_LUMA2_3433, qoip_sim_luma2_3433, 2},
+	{OP_LUMA3_4645, qoip_sim_luma3_4645, 3},
 	{OP_LUMA3_5654, qoip_sim_luma3_5654, 3},
 	{OP_LUMA4_7777, qoip_sim_luma4_7777, 4},
-	{OP_LUMA3_676, qoip_sim_luma3_676, 3},
-	{OP_LUMA3_4645, qoip_sim_luma3_4645, 3},
+	/*Other diff ops*/
+	{OP_LUMA1_232B, qoip_sim_luma1_232_bias, 1},
+	{OP_DELTAA, qoip_sim_deltaa, 1},
+	{OP_DIFF1_222, qoip_sim_diff1_222, 1},
+	{OP_DELTA, qoip_sim_delta, 1},
 	{OP_A, qoip_sim_a, 2},
 	/*index ops, sim code unused so NULL*/
 	{OP_INDEX3, NULL, 1},
@@ -265,7 +267,7 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 	if(level==-1)
 		level=3;
 	else if(level==0)
-		return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[0], entropy, scratch);
+		;//return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[0], entropy, scratch);
 
 	q->in = (const unsigned char *)data;
 	q->px.v = 0;
@@ -333,7 +335,42 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 				q->avg_gb = q->avg_b - q->avg_g;
 				/* Gather stats */
 				stat[stat_cnt] = 0;
-				for(i=0;i<diff_ops_cnt;++i)/*Diff/Luma/Delta*/
+				/*  LUMA */
+				/* Handle LUMA smarter. Relies on diff_ops order */
+				if(q->va) {
+					if(qoip_sim_luma2_3433(q))
+						stat[stat_cnt] |= (15 << 6);//3433 4645 5654 7777
+					else if(qoip_sim_luma3_4645(q))
+						stat[stat_cnt] |= ( 7 << 7);//4645 5654 7777
+					else if(qoip_sim_luma3_5654(q))
+						stat[stat_cnt] |= ( 3 << 8);//5654 7777
+					else if(qoip_sim_luma4_7777(q))
+						stat[stat_cnt] |= ( 1 << 9);//7777
+				}
+				else {//all
+					if(qoip_sim_luma1_232(q))
+						stat[stat_cnt] |= (1023);//all
+					else if(qoip_sim_luma2_3433(q))
+						stat[stat_cnt] |= (1022);//all except 232
+					else if(qoip_sim_luma2_454(q))
+						stat[stat_cnt] |= (0x3BE);//all except 232 and 3433
+					else if(qoip_sim_luma2_464(q))
+						stat[stat_cnt] |= (0x3BC);//all except 232 454 3433
+					else if(qoip_sim_luma3_5654(q))
+						stat[stat_cnt] |= ((7 << 3) | (3 << 8));
+					else if(qoip_sim_luma3_676(q))
+						stat[stat_cnt] |= ((7 << 3) | (1 << 9));
+					else {/*Biggest are not superset chains*/
+						if(qoip_sim_luma3_686(q))
+							stat[stat_cnt] |= (3 << 4);
+						else if(qoip_sim_luma3_787(q))
+							stat[stat_cnt] |= (1 << 5);
+						if(qoip_sim_luma4_7777(q))//no else intentional
+							stat[stat_cnt] |= (1 << 9);
+					}
+				}
+				/* /LUMA */
+				for(i=10;i<diff_ops_cnt;++i)/*Diff/Delta*/
 					stat[stat_cnt] |= (diff_ops[i].sim(q) << i);
 				for(;i<total_ops_cnt;++i) {/*hash index*/
 					if(indexes[i-diff_ops_cnt][q->hash & indexes_mask[i-diff_ops_cnt]].v == q->px.v)
@@ -433,7 +470,7 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 			else
 				curr+=5;
 		}
-		curr +=8;
+		curr += 8;
 		if(curr%8)
 			curr = ((curr/8)+1)*8;
 		if(curr<tmem[0].best_cnt) {
