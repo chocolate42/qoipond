@@ -252,137 +252,37 @@ static inline int qoip_sim_a(qoip_working_t *q) {
 		return 1;
 	return 0;
 }
-/* LUMA sim functions used only in smart function (assumptions made) */
-static inline int qoip_sim_luma1_232(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_gr > -3 && q->avg_gr < 2 &&
-		q->avg_g >   -5 && q->avg_g <   4 &&
-		q->avg_gb > -3 && q->avg_gb < 2
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma2_454(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -9 && q->avg_gr <  8 &&
-		q->avg_g   > -17 && q->avg_g   < 16 &&
-		q->avg_gb >  -9 && q->avg_gb <  8
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma2_464(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -9 && q->avg_gr <  8 &&
-		q->avg_g   > -33 && q->avg_g   < 32 &&
-		q->avg_gb >  -9 && q->avg_gb <  8
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma3_676(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_gr > -33 && q->avg_gr < 32 &&
-		q->avg_g   > -65 && q->avg_g   < 64 &&
-		q->avg_gb > -33 && q->avg_gb < 32
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma3_686(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -33 && q->avg_gr <  32 &&
-		q->avg_gb >  -33 && q->avg_gb <  32
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma3_787(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -65 && q->avg_gr <  64 &&
-		q->avg_gb >  -65 && q->avg_gb <  64
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma2_3433(qoip_working_t *q) {
-	if (
-		q->va   >  -5 && q->va   <  4 &&
-		q->avg_gr >  -5 && q->avg_gr <  4 &&
-		q->avg_g   >  -9 && q->avg_g   <  8 &&
-		q->avg_gb >  -5 && q->avg_gb <  4
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma3_4645(qoip_working_t *q) {
-	if (
-		q->va   > -17 && q->va   < 16 &&
-		q->avg_gr >  -9 && q->avg_gr <  8 &&
-		q->avg_g   > -33 && q->avg_g   < 32 &&
-		q->avg_gb >  -9 && q->avg_gb <  8
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma3_5654(qoip_working_t *q) {
-	if (
-		q->va   >  -9 && q->va    < 8 &&
-		q->avg_gr > -17 && q->avg_gr < 16 &&
-		q->avg_g   > -33 && q->avg_g   < 32 &&
-		q->avg_gb > -17 && q->avg_gb < 16
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma4_7777(qoip_working_t *q) {
-	if (
-		q->va   > -65 && q->va   < 64 &&
-		q->avg_gr > -65 && q->avg_gr < 64 &&
-		q->avg_g   > -65 && q->avg_g   < 64 &&
-		q->avg_gb > -65 && q->avg_gb < 64
-	)
-		return 1;
-	return 0;
-}
 
 typedef struct {
 	u8 code;
 	int (*sim)(qoip_working_t *);
-	int len;
 } qoip_sim_t;
 
 static qoip_sim_t diff_ops[] = {
 	/*LUMA ops */
-	{OP_LUMA1_232, qoip_sim_luma1_232, 1},
-	{OP_LUMA2_454, qoip_sim_luma2_454, 2},
-	{OP_LUMA2_464, qoip_sim_luma2_464, 2},
-	{OP_LUMA3_676, qoip_sim_luma3_676, 3},
-	{OP_LUMA3_686, qoip_sim_luma3_686, 3},
-	{OP_LUMA3_787, qoip_sim_luma3_787, 3},
-	{OP_LUMA2_3433, qoip_sim_luma2_3433, 2},
-	{OP_LUMA3_4645, qoip_sim_luma3_4645, 3},
-	{OP_LUMA3_5654, qoip_sim_luma3_5654, 3},
-	{OP_LUMA4_7777, qoip_sim_luma4_7777, 4},
+	{OP_LUMA1_232, NULL},
+	{OP_LUMA2_454, NULL},
+	{OP_LUMA2_464, NULL},
+	{OP_LUMA3_676, NULL},
+	{OP_LUMA3_686, NULL},
+	{OP_LUMA3_787, NULL},
+	{OP_LUMA2_3433, NULL},
+	{OP_LUMA3_4645, NULL},
+	{OP_LUMA3_5654, NULL},
+	{OP_LUMA4_7777, NULL},
 	/*Other diff ops*/
-	{OP_LUMA1_232B, qoip_sim_luma1_232_bias, 1},
-	{OP_DELTAA, qoip_sim_deltaa, 1},
-	{OP_DIFF1_222, qoip_sim_diff1_222, 1},
-	{OP_DELTA, qoip_sim_delta, 1},
-	{OP_A, qoip_sim_a, 2},
+	{OP_LUMA1_232B, qoip_sim_luma1_232_bias},
+	{OP_DELTAA, qoip_sim_deltaa},
+	{OP_DIFF1_222, qoip_sim_diff1_222},
+	{OP_DELTA, qoip_sim_delta},
+	{OP_A, qoip_sim_a},
 	/*index ops, sim code unused so NULL*/
-	{OP_INDEX3, NULL, 1},
-	{OP_INDEX4, NULL, 1},
-	{OP_INDEX5, NULL, 1},
-	{OP_INDEX6, NULL, 1},
-	{OP_INDEX7, NULL, 1},
-	{OP_INDEX8, NULL, 2},
+	{OP_INDEX3, NULL},
+	{OP_INDEX4, NULL},
+	{OP_INDEX5, NULL},
+	{OP_INDEX6, NULL},
+	{OP_INDEX7, NULL},
+	{OP_INDEX8, NULL},
 	};
 int diff_ops_cnt=15;
 int total_ops_cnt = 21;
@@ -504,34 +404,63 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 				/*  LUMA */
 				/* Handle LUMA smarter. Relies on diff_ops order */
 				if(q->va) {
-					if(qoip_sim_luma2_3433(q))
+					if( q->va > -5 && q->va < 4 &&
+						q->avg_gr > -5 && q->avg_gr < 4 &&
+						q->avg_g  > -9 && q->avg_g  < 8 &&
+						q->avg_gb > -5 && q->avg_gb < 4 )
 						stat[stat_cnt] |= (15 << 6);//3433 4645 5654 7777
-					else if(qoip_sim_luma3_4645(q))
+					else if( q->va   > -17 && q->va   < 16 &&
+						q->avg_gr >  -9 && q->avg_gr <  8 &&
+						q->avg_g  > -33 && q->avg_g  < 32 &&
+						q->avg_gb >  -9 && q->avg_gb <  8 )
 						stat[stat_cnt] |= ( 7 << 7);//4645 5654 7777
-					else if(qoip_sim_luma3_5654(q))
+					else if( q->va   >  -9 && q->va    < 8 &&
+						q->avg_gr > -17 && q->avg_gr < 16 &&
+						q->avg_g  > -33 && q->avg_g  < 32 &&
+						q->avg_gb > -17 && q->avg_gb < 16 )
 						stat[stat_cnt] |= ( 3 << 8);//5654 7777
-					else if(qoip_sim_luma4_7777(q))
+					else if( q->va   > -65 && q->va   < 64 &&
+						q->avg_gr > -65 && q->avg_gr < 64 &&
+						q->avg_g  > -65 && q->avg_g  < 64 &&
+						q->avg_gb > -65 && q->avg_gb < 64 )
 						stat[stat_cnt] |= ( 1 << 9);//7777
 				}
 				else {
-					if(qoip_sim_luma1_232(q))
+					if( q->avg_gr > -3 && q->avg_gr < 2 &&
+						q->avg_g  > -5 && q->avg_g  < 4 &&
+						q->avg_gb > -3 && q->avg_gb < 2 )
 						stat[stat_cnt] |= (1023);//all
-					else if(qoip_sim_luma2_3433(q))
+					else if( q->avg_gr > -5 && q->avg_gr < 4 &&
+						q->avg_g >  -9 && q->avg_g  < 8 &&
+						q->avg_gb > -5 && q->avg_gb < 4 )
 						stat[stat_cnt] |= (1022);//all except 232
-					else if(qoip_sim_luma2_454(q))
-						stat[stat_cnt] |= (0x3BE);//all except 232 and 3433
-					else if(qoip_sim_luma2_464(q))
+					else if( q->avg_gr >  -9 && q->avg_gr <  8 &&
+						q->avg_g  > -17 && q->avg_g  < 16 &&
+						q->avg_gb >  -9 && q->avg_gb <  8 )
+						stat[stat_cnt] |= (0x3BE);//all except 232 3433
+					else if( q->avg_gr >  -9 && q->avg_gr <  8 &&
+						q->avg_g  > -33 && q->avg_g  < 32 &&
+						q->avg_gb >  -9 && q->avg_gb <  8 )
 						stat[stat_cnt] |= (0x3BC);//all except 232 454 3433
-					else if(qoip_sim_luma3_5654(q))
+					else if( q->avg_gr > -17 && q->avg_gr < 16 &&
+						q->avg_g  > -33 && q->avg_g  < 32 &&
+						q->avg_gb > -17 && q->avg_gb < 16 )
 						stat[stat_cnt] |= ((7 << 3) | (3 << 8));
-					else if(qoip_sim_luma3_676(q))
+					else if( q->avg_gr > -33 && q->avg_gr < 32 &&
+						q->avg_g  > -65 && q->avg_g  < 64 &&
+						q->avg_gb > -33 && q->avg_gb < 32 )
 						stat[stat_cnt] |= ((7 << 3) | (1 << 9));
-					else {/*Biggest are not superset chains*/
-						if(qoip_sim_luma3_686(q))
-							stat[stat_cnt] |= (3 << 4);
-						else if(qoip_sim_luma3_787(q))
-							stat[stat_cnt] |= (1 << 5);
-						if(qoip_sim_luma4_7777(q))//no else intentional as 7777 not superset
+					else {
+						if( q->avg_gr > -33 && q->avg_gr < 32 &&
+							q->avg_gb > -33 && q->avg_gb < 32 )
+							stat[stat_cnt] |= (3 << 4);//686 787
+						else if( q->avg_gr > -65 && q->avg_gr < 64 &&
+							q->avg_gb > -65 && q->avg_gb < 64 )
+							stat[stat_cnt] |= (1 << 5);//787
+						/*intentionally no else, 7777 not a superset of 686/787*/
+						if( q->avg_gr > -65 && q->avg_gr < 64 &&
+							q->avg_g  > -65 && q->avg_g  < 64 &&
+							q->avg_gb > -65 && q->avg_gb < 64 )//7777
 							stat[stat_cnt] |= (1 << 9);
 					}
 				}
