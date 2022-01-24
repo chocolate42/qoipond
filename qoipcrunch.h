@@ -249,7 +249,7 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 	int best_index, i, level;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
-	size_t *run=NULL, run_cap=0, run_cnt=0, stat_cnt=0;
+	size_t *run=NULL, run_cap=0, run_cnt=0, run_short[256] = {0}, stat_cnt=0;
 	u64 *stat=NULL;
 	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0};
 	qoip_rgba_t *indexes[6] = {index3, index4, index5, index6, index7, index8};
@@ -301,12 +301,16 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 				++q->run;/* Accumulate as much RLE as there is */
 			else {
 				if(q->run) {
-					if(run_cnt==run_cap) {
-						run_cap += 1024;
-						run = realloc(run, sizeof(size_t)*run_cap);
-						assert(run);
+					if(q->run<=256)
+						++run_short[q->run-1];
+					else {
+						if(run_cnt==run_cap) {
+							run_cap += 1024;
+							run = realloc(run, sizeof(size_t)*run_cap);
+							assert(run);
+						}
+						run[run_cnt++] = q->run;
 					}
-					run[run_cnt++] = q->run;
 					q->run = 0;
 				}
 				/* generate variables that may be needed by ops */
@@ -349,12 +353,16 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 		}
 	}
 	if(q->run) {/* Cap off ending run if present*/
-		if(run_cnt==run_cap) {
-			run_cap += 1024;
-			run = realloc(run, sizeof(size_t)*run_cap);
-			assert(run);
+		if(q->run<=256)
+			++run_short[q->run-1];
+		else {
+			if(run_cnt==run_cap) {
+				run_cap += 1024;
+				run = realloc(run, sizeof(size_t)*run_cap);
+				assert(run);
+			}
+			run[run_cnt++] = q->run;
 		}
-		run[run_cnt++] = q->run;
 		q->run = 0;
 	}
 
@@ -369,13 +377,19 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 		size_t k, m, curr=0;
 		const opdef_t *ret;
 		opstring_to_bytes(qoipcrunch_unified[i], tmem[0].op, &(tmem[0].op_cnt));
+		curr+=16;//qoip header
+		curr+=16;//bitstream min
+		if(tmem[0].op_cnt>6)
+			curr+= 8*(((tmem[0].op_cnt-6)/8)+1);
 		/* run handling */
-		tmem[0].run1=253;
+		tmem[0].run1=253;/*get run sizes*/
 		for(k=0;k<tmem[0].op_cnt;++k)
 			tmem[0].run1 -= QOIP_OPCNT(tmem[0].op[k]);
 		assert(tmem[0].run1>=0);
 		tmem[0].run2=tmem[0].run1 + 256;
-		for(k=0;k<run_cnt;++k)
+		for(k=0;k<256;++k)/*short runs*/
+			curr += run_short[k]*qoip_sim_run(tmem[0].run1, tmem[0].run2, k+1);
+		for(k=0;k<run_cnt;++k)/*long runs*/
 			curr += qoip_sim_run(tmem[0].run1, tmem[0].run2, run[k]);
 		/* Build op masks */
 		for(k=0;k<4;++k)
@@ -419,6 +433,9 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 			else
 				curr+=5;
 		}
+		curr +=8;
+		if(curr%8)
+			curr = ((curr/8)+1)*8;
 		if(curr<tmem[0].best_cnt) {
 			tmem[0].best_cnt = curr;
 			tmem[0].best_index = i;
