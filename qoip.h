@@ -1,10 +1,10 @@
+/* SPDX-License-Identifier: MIT */
 /* QOIPond - Lossless image format inspired by QOI “Quite OK Image” format
 
 Incompatible adaptation of QOI format - https://phoboslab.org
 
--- LICENSE: The MIT License(MIT)
-Copyright(c) 2021 Dominic Szablewski (QOI format)
-Copyright(c) 2021 Matthew Ling (QOIP format)
+Copyright 2021 Dominic Szablewski (QOI format)
+Copyright 2021 Matthew Ling (QOIP format)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files(the "Software"), to deal in

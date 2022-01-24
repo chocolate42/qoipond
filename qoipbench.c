@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: MIT */
 /* Simple benchmark suite for png, stbi and qoip
 
 Requires libpng, "stb_image.h" and "stb_image_write.h"
@@ -6,9 +7,7 @@ Compile with:
 
 Dominic Szablewski - https://phoboslab.org
 
--- LICENSE: The MIT License(MIT)
-
-Copyright(c) 2021 Dominic Szablewski
+Copyright 2021 Dominic Szablewski
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files(the "Software"), to deal in

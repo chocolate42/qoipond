@@ -1,13 +1,25 @@
+/* SPDX-License-Identifier: MIT */
+/* Op function declarations for smart crunch, cleanup TODO
+
+Copyright 2021 Matthew Ling
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files(the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and / or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions :
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE. */
 #ifndef QOIP_FUNC
 #define QOIP_FUNC
-/* Op encode/decode functions used by qoip.h implementation. Included by QOIP_C only
-
-* qoip_enc_* is the encoder for OP_*, qoip_dec_* is the decoder
-* The encode functions detect if an op can be used and encodes it if it can. If
-  the op is used 1 is returned so qoip_encode knows to proceed to the next pixel
-* The decode functions are called when qoip_decode has determined the op was
-  used, no detection necessary
-*/
 
 /* === Hash cache index functions */
 /* This function encodes all index1_* ops */
