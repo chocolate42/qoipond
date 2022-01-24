@@ -250,16 +250,12 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 	int best_index, i, level;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
-	size_t *run=NULL;
-	size_t run_cnt=0, run_cap=0;
+	size_t *run=NULL, run_cap=0, run_cnt=0, stat_cnt=0;
 	u64 *stat=NULL;
-	size_t stat_cnt=0;
 	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0};
 	qoip_rgba_t *indexes[6] = {index3, index4, index5, index6, index7, index8};
 	int indexes_mask[6] = {7, 15, 31, 63, 127, 255};
 	thread_sim_t tmem[1]={0};
-
-	q->in = (const unsigned char *)data;
 
 	if ( data == NULL || desc == NULL || out == NULL || out_len == NULL ||
 		desc->width == 0 || desc->height == 0 ||
@@ -267,7 +263,12 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 		return qoip_ret(1, stderr, "qoip_smart: Bad arguments");
 
 	level = qoip_effortlevel(effort);
+	if(level==-1)
+		level=3;
+	else if(level==0)
+		return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[0], entropy, scratch);
 
+	q->in = (const unsigned char *)data;
 	q->px.v = 0;
 	q->px.rgba.a = 255;
 	q->width = desc->width;
@@ -375,14 +376,8 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 			tmem[0].run1 -= QOIP_OPCNT(tmem[0].op[k]);
 		assert(tmem[0].run1>=0);
 		tmem[0].run2=tmem[0].run1 + 256;
-		//printf("run1 %d run2 %d\n", tmem[0].run1, tmem[0].run2);
-		//for(k=0;k<run_cnt;++k)
-		//	curr += qoip_sim_run(tmem[0].run1, tmem[0].run2, run[k]);
-		//printf("%zu runs took %zu bytes\n", run_cnt, curr);
-		//for(k=0;k<run_cnt;++k)
-		//	chk_run += run[k];
-		//printf("Runs handle %zu pixels, leaving %zu non-run pixels\n", chk_run, (desc->width*desc->height)-chk_run);
-		//printf("Non-run pixel stat count: %zu\n", stat_cnt);
+		for(k=0;k<run_cnt;++k)
+			curr += qoip_sim_run(tmem[0].run1, tmem[0].run2, run[k]);
 		/* Build op masks */
 		for(k=0;k<4;++k)
 			tmem[0].length_masks[k]=0;
@@ -432,7 +427,6 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 	}
 	/*aggregate OpenMP*/
 	best_index = tmem[0].best_index;
-	//printf("best index = %d calculated_size = %zu\n", tmem[0].best_index, tmem[0].best_cnt);
 
 	if(stat)
 		free(stat);
@@ -441,25 +435,5 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 
 	return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[best_index], entropy, scratch);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #endif /* QOIPCRUNCH_C */
