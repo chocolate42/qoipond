@@ -314,15 +314,14 @@ static inline size_t qoip_sim_run(int run1_len, int run2_len, size_t run) {
 }
 
 int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *scratch, int threads, int entropy) {
-	int best_index, i, level;
+	int best_index=0, i, indexes_mask[6] = {7, 15, 31, 63, 127, 255}, level, thread_cnt;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
-	size_t *run=NULL, run_cap=0, run_cnt=0, run_short[256] = {0}, stat_cnt=0;
+	size_t best_cnt=-1, *run=NULL, run_cap=0, run_cnt=0, run_short[256] = {0}, stat_cnt=0;
 	u64 *stat=NULL;
 	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0};
 	qoip_rgba_t *indexes[6] = {index3, index4, index5, index6, index7, index8};
-	int indexes_mask[6] = {7, 15, 31, 63, 127, 255};
-	thread_sim_t tmem[1]={0};
+	thread_sim_t tmem[QOIP_MAX_THREADS]={0};
 
 	if ( data == NULL || desc == NULL || out == NULL || out_len == NULL ||
 		desc->width == 0 || desc->height == 0 ||
@@ -333,7 +332,7 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 	if(level==-1)
 		level=3;
 	else if(level==0)
-		;//return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[0], entropy, scratch);
+		return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[0], entropy, scratch);
 
 	q->in = (const unsigned char *)data;
 	q->px.v = 0;
@@ -499,68 +498,74 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 	}
 
 	/* Processing pass */
-	//OpenMP TODO
-	/*init working mem*/
-	tmem[0].best_cnt=-1;
-	tmem[0].best_index=-1;
+	thread_cnt = threads==0 ? omp_get_num_procs() : threads;
+	thread_cnt = thread_cnt>QOIP_MAX_THREADS ? QOIP_MAX_THREADS : thread_cnt;
+	thread_cnt = (1<<level)<thread_cnt ? (1<<level) : thread_cnt;
+	omp_set_num_threads(thread_cnt);
+
+	#pragma omp parallel
+	{/*init working memory*/
+	tmem[omp_get_thread_num()].best_cnt=-1;
+	tmem[omp_get_thread_num()].best_index=-1;
+	}
+
+	#pragma omp parallel for
 	for(i=0;i<(1<<level);++i) {
-	//for(i=0;i<1;++i) {
-		//size_t chk_run=0;
 		size_t k, m, curr=0;
 		const opdef_t *ret;
-		opstring_to_bytes(qoipcrunch_unified[i], tmem[0].op, &(tmem[0].op_cnt));
+		opstring_to_bytes(qoipcrunch_unified[i], tmem[omp_get_thread_num()].op, &(tmem[omp_get_thread_num()].op_cnt));
 		curr+=16;//qoip header
 		curr+=16;//bitstream min
-		if(tmem[0].op_cnt>6)
-			curr+= 8*(((tmem[0].op_cnt-6)/8)+1);
+		if(tmem[omp_get_thread_num()].op_cnt>6)
+			curr+= 8*(((tmem[omp_get_thread_num()].op_cnt-6)/8)+1);
 		/* run handling */
-		tmem[0].run1=253;/*get run sizes*/
-		for(k=0;k<tmem[0].op_cnt;++k)
-			tmem[0].run1 -= QOIP_OPCNT(tmem[0].op[k]);
-		assert(tmem[0].run1>=0);
-		tmem[0].run2=tmem[0].run1 + 256;
+		tmem[omp_get_thread_num()].run1=253;/*get run sizes*/
+		for(k=0;k<tmem[omp_get_thread_num()].op_cnt;++k)
+			tmem[omp_get_thread_num()].run1 -= QOIP_OPCNT(tmem[omp_get_thread_num()].op[k]);
+		assert(tmem[omp_get_thread_num()].run1>=0);
+		tmem[omp_get_thread_num()].run2=tmem[omp_get_thread_num()].run1 + 256;
 		for(k=0;k<256;++k)/*short runs*/
-			curr += run_short[k]*qoip_sim_run(tmem[0].run1, tmem[0].run2, k+1);
+			curr += run_short[k]*qoip_sim_run(tmem[omp_get_thread_num()].run1, tmem[omp_get_thread_num()].run2, k+1);
 		for(k=0;k<run_cnt;++k)/*long runs*/
-			curr += qoip_sim_run(tmem[0].run1, tmem[0].run2, run[k]);
+			curr += qoip_sim_run(tmem[omp_get_thread_num()].run1, tmem[omp_get_thread_num()].run2, run[k]);
 		/* Build op masks */
 		for(k=0;k<4;++k)
-			tmem[0].length_masks[k]=0;
-		for(k=0;k<tmem[0].op_cnt;++k) {
-			ret = qoip_op_lookup(tmem[0].op[k]);
+			tmem[omp_get_thread_num()].length_masks[k]=0;
+		for(k=0;k<tmem[omp_get_thread_num()].op_cnt;++k) {
+			ret = qoip_op_lookup(tmem[omp_get_thread_num()].op[k]);
 			assert(ret);
 			for(m=0;m<total_ops_cnt;++m) {
-				if(tmem[0].op[k] == diff_ops[m].code) {
+				if(tmem[omp_get_thread_num()].op[k] == diff_ops[m].code) {
 					switch(ret->set) {
 						case QOIP_SET_INDEX1:
 						case QOIP_SET_LEN1:
-							tmem[0].length_masks[0] |= (1 << m);
+							tmem[omp_get_thread_num()].length_masks[0] |= (1 << m);
 							break;
 						case QOIP_SET_INDEX2:
 						case QOIP_SET_LEN2:
-							tmem[0].length_masks[1] |= (1 << m);
+							tmem[omp_get_thread_num()].length_masks[1] |= (1 << m);
 							break;
 						case QOIP_SET_LEN3:
-							tmem[0].length_masks[2] |= (1 << m);
+							tmem[omp_get_thread_num()].length_masks[2] |= (1 << m);
 							break;
 						case QOIP_SET_LEN4:
-							tmem[0].length_masks[3] |= (1 << m);
+							tmem[omp_get_thread_num()].length_masks[3] |= (1 << m);
 							break;
 					}
 					break;
 				}
 			}
 		}
-		tmem[0].length_masks[3] |= (1 << total_ops_cnt);/*OP_RGB*/
+		tmem[omp_get_thread_num()].length_masks[3] |= (1 << total_ops_cnt);/*OP_RGB*/
 		/* Use op masks */
 		for(k=0;k<stat_cnt;++k) {
-			if(     tmem[0].length_masks[0] & stat[k])
+			if(     tmem[omp_get_thread_num()].length_masks[0] & stat[k])
 				++curr;
-			else if(tmem[0].length_masks[1] & stat[k])
+			else if(tmem[omp_get_thread_num()].length_masks[1] & stat[k])
 				curr+=2;
-			else if(tmem[0].length_masks[2] & stat[k])
+			else if(tmem[omp_get_thread_num()].length_masks[2] & stat[k])
 				curr+=3;
-			else if(tmem[0].length_masks[3] & stat[k])
+			else if(tmem[omp_get_thread_num()].length_masks[3] & stat[k])
 				curr+=4;
 			else
 				curr+=5;
@@ -568,14 +573,18 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 		curr += 8;
 		if(curr%8)
 			curr = ((curr/8)+1)*8;
-		if(curr<tmem[0].best_cnt) {
-			tmem[0].best_cnt = curr;
-			tmem[0].best_index = i;
+		if(curr<tmem[omp_get_thread_num()].best_cnt) {
+			tmem[omp_get_thread_num()].best_cnt = curr;
+			tmem[omp_get_thread_num()].best_index = i;
 		}
 	}
 	/*aggregate OpenMP*/
-	best_index = tmem[0].best_index;
-
+	for(i=0;i<thread_cnt;++i) {
+		if(best_cnt > tmem[i].best_cnt) {
+			best_cnt = tmem[i].best_cnt;
+			best_index = tmem[i].best_index;
+		}
+	}
 	if(stat)
 		free(stat);
 	if(run)
