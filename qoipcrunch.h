@@ -189,106 +189,16 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 
 /* Code for smart function follows */
 
-/*Sim functions perform an op encode test on the input*/
-static inline int qoip_sim_delta(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_r > -2 && q->avg_r < 2 &&
-		q->avg_g > -2 && q->avg_g < 2 &&
-		q->avg_b > -2 && q->avg_b < 2
-	)
-		return 1;
-	else if (
-		q->vr == 0 && q->vg == 0 && q->vb == 0 &&
-		q->va > -3 && q->va < 3
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_deltaa(qoip_working_t *q) {
-	if (
-		(q->va == -1 || q->va == 1) &&
-		q->avg_r > -2 && q->avg_r < 2 &&
-		q->avg_g > -2 && q->avg_g < 2 &&
-		q->avg_b > -2 && q->avg_b < 2
-	)
-		return 1;
-	else if (/*encode small changes in a, -5..4*/
-		q->vr == 0 && q->vg == 0 && q->vb == 0 &&
-		q->va > -6 && q->va < 5
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_diff1_222(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_r > -3 && q->avg_r < 2 &&
-		q->avg_g > -3 && q->avg_g < 2 &&
-		q->avg_b > -3 && q->avg_b < 2
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_luma1_232_bias(qoip_working_t *q) {
-	if (
-		q->va == 0 &&
-		q->avg_g   > -5 && q->avg_g   < 0 &&
-		q->avg_gr > -2 && q->avg_gr < 3 &&
-		q->avg_gb > -2 && q->avg_gb < 3
-	)
-		return 1;
-	else if (
-		q->va == 0 &&
-		q->avg_g   > -1 && q->avg_g   < 4 &&
-		q->avg_gr > -3 && q->avg_gr < 2 &&
-		q->avg_gb > -3 && q->avg_gb < 2
-	)
-		return 1;
-	return 0;
-}
-static inline int qoip_sim_a(qoip_working_t *q) {
-	if ( q->vr == 0 && q->vg == 0 && q->vb == 0 )
-		return 1;
-	return 0;
-}
+/* Order matters as it determines where in stat integer
+an ops flag resides, and ops are ordered in ascending length so that
+bultin_ctzll can do some magic to eliminate branching. oplen_table is a lookup table
+of op lengths that could possibly be eliminated in favour of some equation
+that generates the length, maybe with the help of a sparse stat integer*/
+static u8 op_table[] = {OP_LUMA1_232, OP_LUMA1_232B, OP_DELTAA, OP_DIFF1_222, OP_DELTA, OP_INDEX3, OP_INDEX4, OP_INDEX5, OP_INDEX6, OP_INDEX7, OP_INDEX8, OP_A, OP_LUMA2_3433, OP_LUMA2_454, OP_LUMA2_464, OP_LUMA3_4645, OP_LUMA3_5654, OP_LUMA3_676, OP_LUMA3_686, OP_LUMA3_787, OP_LUMA4_7777, /*OP_RGB, OP_RGBA*/};
+const static u8 oplen_table[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 5};
 
 typedef struct {
-	u8 code;
-	int (*sim)(qoip_working_t *);
-} qoip_sim_t;
-
-static qoip_sim_t diff_ops[] = {
-	/*LUMA ops */
-	{OP_LUMA1_232, NULL},
-	{OP_LUMA2_454, NULL},
-	{OP_LUMA2_464, NULL},
-	{OP_LUMA3_676, NULL},
-	{OP_LUMA3_686, NULL},
-	{OP_LUMA3_787, NULL},
-	{OP_LUMA2_3433, NULL},
-	{OP_LUMA3_4645, NULL},
-	{OP_LUMA3_5654, NULL},
-	{OP_LUMA4_7777, NULL},
-	/*Other diff ops*/
-	{OP_LUMA1_232B, qoip_sim_luma1_232_bias},
-	{OP_DELTAA, qoip_sim_deltaa},
-	{OP_DIFF1_222, qoip_sim_diff1_222},
-	{OP_DELTA, qoip_sim_delta},
-	{OP_A, qoip_sim_a},
-	/*index ops, sim code unused so NULL*/
-	{OP_INDEX3, NULL},
-	{OP_INDEX4, NULL},
-	{OP_INDEX5, NULL},
-	{OP_INDEX6, NULL},
-	{OP_INDEX7, NULL},
-	{OP_INDEX8, NULL},
-	};
-int diff_ops_cnt=15;
-int total_ops_cnt = 21;
-
-typedef struct {
-	u64 length_masks[4];
+	u64 opmask;
 	u8 op[16];
 	int op_cnt, best_index, run1, run2;
 	size_t best_cnt;
@@ -311,6 +221,15 @@ static inline size_t qoip_sim_run(int run1_len, int run2_len, size_t run) {
 	else if(run)
 		++ret;
 	return ret;
+}
+
+static inline int find_index(u8 *table, u8 key) {
+	int ret=0;
+	for(;;++ret) {
+		if(table[ret]==key)
+			return ret;
+	}
+	return -1;
 }
 
 int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *scratch, int threads, int entropy) {
@@ -401,78 +320,106 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 				/* Gather stats */
 				stat[stat_cnt] = 0;
 				/*  LUMA */
-				/* Handle LUMA smarter. Relies on diff_ops order */
 				if(q->va) {
 					if( q->va > -5 && q->va < 4 &&
 						q->avg_gr > -5 && q->avg_gr < 4 &&
 						q->avg_g  > -9 && q->avg_g  < 8 &&
 						q->avg_gb > -5 && q->avg_gb < 4 )
-						stat[stat_cnt] |= (15 << 6);//3433 4645 5654 7777
+						stat[stat_cnt] |= ((1<<12)|(3<<15)|(1<<20));//3433 4645 5654 7777
 					else if( q->va   > -17 && q->va   < 16 &&
 						q->avg_gr >  -9 && q->avg_gr <  8 &&
 						q->avg_g  > -33 && q->avg_g  < 32 &&
 						q->avg_gb >  -9 && q->avg_gb <  8 )
-						stat[stat_cnt] |= ( 7 << 7);//4645 5654 7777
+						stat[stat_cnt] |= ((3<<15)|(1<<20));//4645 5654 7777
 					else if( q->va   >  -9 && q->va    < 8 &&
 						q->avg_gr > -17 && q->avg_gr < 16 &&
 						q->avg_g  > -33 && q->avg_g  < 32 &&
 						q->avg_gb > -17 && q->avg_gb < 16 )
-						stat[stat_cnt] |= ( 3 << 8);//5654 7777
+						stat[stat_cnt] |= ((1<<16)|(1<<20));//5654 7777
 					else if( q->va   > -65 && q->va   < 64 &&
 						q->avg_gr > -65 && q->avg_gr < 64 &&
 						q->avg_g  > -65 && q->avg_g  < 64 &&
 						q->avg_gb > -65 && q->avg_gb < 64 )
-						stat[stat_cnt] |= ( 1 << 9);//7777
+						stat[stat_cnt] |= (1<<20);//7777
 				}
 				else {
 					if( q->avg_gr > -3 && q->avg_gr < 2 &&
 						q->avg_g  > -5 && q->avg_g  < 4 &&
 						q->avg_gb > -3 && q->avg_gb < 2 )
-						stat[stat_cnt] |= (1023);//all
+						stat[stat_cnt] |= (1|(511<<12));//all
 					else if( q->avg_gr > -5 && q->avg_gr < 4 &&
 						q->avg_g >  -9 && q->avg_g  < 8 &&
 						q->avg_gb > -5 && q->avg_gb < 4 )
-						stat[stat_cnt] |= (1022);//all except 232
+						stat[stat_cnt] |= (511<<12);//3433+
 					else if( q->avg_gr >  -9 && q->avg_gr <  8 &&
 						q->avg_g  > -17 && q->avg_g  < 16 &&
 						q->avg_gb >  -9 && q->avg_gb <  8 )
-						stat[stat_cnt] |= (0x3BE);//all except 232 3433
+						stat[stat_cnt] |= (255<<13);//454+
 					else if( q->avg_gr >  -9 && q->avg_gr <  8 &&
 						q->avg_g  > -33 && q->avg_g  < 32 &&
 						q->avg_gb >  -9 && q->avg_gb <  8 )
-						stat[stat_cnt] |= (0x3BC);//all except 232 454 3433
+						stat[stat_cnt] |= (127<<14);//464+
 					else if( q->avg_gr > -17 && q->avg_gr < 16 &&
 						q->avg_g  > -33 && q->avg_g  < 32 &&
 						q->avg_gb > -17 && q->avg_gb < 16 )
-						stat[stat_cnt] |= ((7 << 3) | (3 << 8));
+						stat[stat_cnt] |= (31<<16);//5654+
 					else if( q->avg_gr > -33 && q->avg_gr < 32 &&
 						q->avg_g  > -65 && q->avg_g  < 64 &&
 						q->avg_gb > -33 && q->avg_gb < 32 )
-						stat[stat_cnt] |= ((7 << 3) | (1 << 9));
+						stat[stat_cnt] |= (15<<17);//676+
 					else {
 						if( q->avg_gr > -33 && q->avg_gr < 32 &&
 							q->avg_gb > -33 && q->avg_gb < 32 )
-							stat[stat_cnt] |= (3 << 4);//686 787
+							stat[stat_cnt] |= (3<<18);//686 787
 						else if( q->avg_gr > -65 && q->avg_gr < 64 &&
 							q->avg_gb > -65 && q->avg_gb < 64 )
-							stat[stat_cnt] |= (1 << 5);//787
+							stat[stat_cnt] |= (1<<19);//787
 						/*intentionally no else, 7777 not a superset of 686/787*/
 						if( q->avg_gr > -65 && q->avg_gr < 64 &&
 							q->avg_g  > -65 && q->avg_g  < 64 &&
 							q->avg_gb > -65 && q->avg_gb < 64 )//7777
-							stat[stat_cnt] |= (1 << 9);
+							stat[stat_cnt] |= (1<<20);
 					}
 				}
-				/* /LUMA */
-				for(i=10;i<diff_ops_cnt;++i)/*Diff/Delta*/
-					stat[stat_cnt] |= (diff_ops[i].sim(q) << i);
-				for(;i<total_ops_cnt;++i) {/*hash index*/
-					if(indexes[i-diff_ops_cnt][q->hash & indexes_mask[i-diff_ops_cnt]].v == q->px.v)
-						stat[stat_cnt] |= (1 << i);
-					indexes[i-diff_ops_cnt][q->hash & indexes_mask[i-diff_ops_cnt]] = q->px;
+				/* Unique ops */
+				if(q->va==0) {
+					if( q->avg_g > -5 && q->avg_g < 0 &&
+						q->avg_gr > -2 && q->avg_gr < 3 &&
+						q->avg_gb > -2 && q->avg_gb < 3 )
+						stat[stat_cnt] |= (1 << 1);//232b
+					else if( q->avg_g   > -1 && q->avg_g   < 4 &&
+						q->avg_gr > -3 && q->avg_gr < 2 &&
+						q->avg_gb > -3 && q->avg_gb < 2 )
+						stat[stat_cnt] |= (1 << 1);//232b
+					if( q->avg_r > -3 && q->avg_r < 2 &&
+						q->avg_g > -3 && q->avg_g < 2 &&
+						q->avg_b > -3 && q->avg_b < 2 )
+						stat[stat_cnt] |= (1 << 3);//diff 222
+					if( q->avg_r > -2 && q->avg_r < 2 &&
+						q->avg_g > -2 && q->avg_g < 2 &&
+						q->avg_b > -2 && q->avg_b < 2 )
+						stat[stat_cnt] |= (1 << 4);//delta
+					stat[stat_cnt] |= (1 << 21);//OP_RGB
 				}
-				if(q->va==0)
-					stat[stat_cnt] |= (1 << i);//OP_RGB
+				if( q->vr == 0 && q->vg == 0 && q->vb == 0 &&
+					q->va > -3 && q->va < 3 )
+					stat[stat_cnt] |= (1 << 4);//delta
+				if( (q->va == -1 || q->va == 1) &&
+					q->avg_r > -2 && q->avg_r < 2 &&
+					q->avg_g > -2 && q->avg_g < 2 &&
+					q->avg_b > -2 && q->avg_b < 2 )
+					stat[stat_cnt] |= (1 << 2);//deltaa
+				else if( q->vr == 0 && q->vg == 0 && q->vb == 0 &&
+					q->va > -6 && q->va < 5 )
+					stat[stat_cnt] |= (1 << 2);//deltaa
+				if( q->vr == 0 && q->vg == 0 && q->vb == 0 )
+					stat[stat_cnt] |= (1 << 11);//a
+				for(i=5;i<11;++i) {/*hash index*/
+					if(indexes[i-5][q->hash & indexes_mask[i-5]].v == q->px.v)
+						stat[stat_cnt] |= (1 << i);
+					indexes[i-5][q->hash & indexes_mask[i-5]] = q->px;
+				}
+				stat[stat_cnt] |= (1 << 22);//OP_RGBA always present so ctzll has a fallback
 				++stat_cnt;
 			}
 			if(q->px_w<8192) {
@@ -505,14 +452,12 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 
 	#pragma omp parallel
 	{/*init working memory*/
-	tmem[omp_get_thread_num()].best_cnt=-1;
-	tmem[omp_get_thread_num()].best_index=-1;
+		tmem[omp_get_thread_num()].best_cnt=-1;
+		tmem[omp_get_thread_num()].best_index=-1;
 	}
-
 	#pragma omp parallel for
 	for(i=0;i<(1<<level);++i) {
 		size_t k, m, curr=0;
-		const opdef_t *ret;
 		opstring_to_bytes(qoipcrunch_unified[i], tmem[omp_get_thread_num()].op, &(tmem[omp_get_thread_num()].op_cnt));
 		curr+=16;//qoip header
 		curr+=16;//bitstream min
@@ -528,48 +473,14 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 			curr += run_short[k]*qoip_sim_run(tmem[omp_get_thread_num()].run1, tmem[omp_get_thread_num()].run2, k+1);
 		for(k=0;k<run_cnt;++k)/*long runs*/
 			curr += qoip_sim_run(tmem[omp_get_thread_num()].run1, tmem[omp_get_thread_num()].run2, run[k]);
-		/* Build op masks */
-		for(k=0;k<4;++k)
-			tmem[omp_get_thread_num()].length_masks[k]=0;
-		for(k=0;k<tmem[omp_get_thread_num()].op_cnt;++k) {
-			ret = qoip_op_lookup(tmem[omp_get_thread_num()].op[k]);
-			assert(ret);
-			for(m=0;m<total_ops_cnt;++m) {
-				if(tmem[omp_get_thread_num()].op[k] == diff_ops[m].code) {
-					switch(ret->set) {
-						case QOIP_SET_INDEX1:
-						case QOIP_SET_LEN1:
-							tmem[omp_get_thread_num()].length_masks[0] |= (1 << m);
-							break;
-						case QOIP_SET_INDEX2:
-						case QOIP_SET_LEN2:
-							tmem[omp_get_thread_num()].length_masks[1] |= (1 << m);
-							break;
-						case QOIP_SET_LEN3:
-							tmem[omp_get_thread_num()].length_masks[2] |= (1 << m);
-							break;
-						case QOIP_SET_LEN4:
-							tmem[omp_get_thread_num()].length_masks[3] |= (1 << m);
-							break;
-					}
-					break;
-				}
-			}
+		/*build op mask*/
+		tmem[omp_get_thread_num()].opmask = 3<<21;
+		for(m=0;m<tmem[omp_get_thread_num()].op_cnt;++m) {
+			tmem[omp_get_thread_num()].opmask |= 1<<find_index(op_table, tmem[omp_get_thread_num()].op[m]);
 		}
-		tmem[omp_get_thread_num()].length_masks[3] |= (1 << total_ops_cnt);/*OP_RGB*/
-		/* Use op masks */
-		for(k=0;k<stat_cnt;++k) {
-			if(     tmem[omp_get_thread_num()].length_masks[0] & stat[k])
-				++curr;
-			else if(tmem[omp_get_thread_num()].length_masks[1] & stat[k])
-				curr+=2;
-			else if(tmem[omp_get_thread_num()].length_masks[2] & stat[k])
-				curr+=3;
-			else if(tmem[omp_get_thread_num()].length_masks[3] & stat[k])
-				curr+=4;
-			else
-				curr+=5;
-		}
+		/* Use op mask */
+		for(k=0;k<stat_cnt;++k)
+			curr += oplen_table[__builtin_ctzll(tmem[omp_get_thread_num()].opmask & stat[k])];
 		curr += 8;
 		if(curr%8)
 			curr = ((curr/8)+1)*8;
