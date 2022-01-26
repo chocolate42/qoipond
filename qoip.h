@@ -128,6 +128,7 @@ typedef struct {
 	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
 	i8 vr, vg, vb, va;/*Difference from previous */
 	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/* Difference from average */
+	u8 mag_gr, mag_g, mag_gb, mag_rb;/* Magnitudes of avg* to reduce comparisons */
 	u8 run1_opcode, run2_opcode, rgb_opcode, rgba_opcode;/* Implicit opcodes */
 } qoip_working_t;
 

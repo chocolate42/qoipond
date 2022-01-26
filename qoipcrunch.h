@@ -317,82 +317,65 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 				q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
 				q->avg_gr = q->avg_r - q->avg_g;
 				q->avg_gb = q->avg_b - q->avg_g;
+				q->mag_gr = q->avg_gr>=0?q->avg_gr:-(q->avg_gr+1);
+				q->mag_g = q->avg_g>=0?q->avg_g:-(q->avg_g+1);
+				q->mag_gb = q->avg_gb>=0?q->avg_gb:-(q->avg_gb+1);
+				q->mag_rb = q->mag_gr>q->mag_gb?q->mag_gr:q->mag_gb;
 				/* Gather stats */
 				stat[stat_cnt] = 0;
 				/*  LUMA */
 				if(q->va) {
 					if( q->va > -5 && q->va < 4 &&
-						q->avg_gr > -5 && q->avg_gr < 4 &&
-						q->avg_g  > -9 && q->avg_g  < 8 &&
-						q->avg_gb > -5 && q->avg_gb < 4 )
+						q->mag_rb < 4 &&
+						q->mag_g  < 8 )
 						stat[stat_cnt] |= ((1<<12)|(3<<15)|(1<<20));//3433 4645 5654 7777
 					else if( q->va   > -17 && q->va   < 16 &&
-						q->avg_gr >  -9 && q->avg_gr <  8 &&
-						q->avg_g  > -33 && q->avg_g  < 32 &&
-						q->avg_gb >  -9 && q->avg_gb <  8 )
+						q->mag_rb <  8 &&
+						q->mag_g  < 32 )
 						stat[stat_cnt] |= ((3<<15)|(1<<20));//4645 5654 7777
 					else if( q->va   >  -9 && q->va    < 8 &&
-						q->avg_gr > -17 && q->avg_gr < 16 &&
-						q->avg_g  > -33 && q->avg_g  < 32 &&
-						q->avg_gb > -17 && q->avg_gb < 16 )
+						q->mag_rb < 16 &&
+						q->mag_g  < 32 )
 						stat[stat_cnt] |= ((1<<16)|(1<<20));//5654 7777
 					else if( q->va   > -65 && q->va   < 64 &&
-						q->avg_gr > -65 && q->avg_gr < 64 &&
-						q->avg_g  > -65 && q->avg_g  < 64 &&
-						q->avg_gb > -65 && q->avg_gb < 64 )
+						q->mag_rb < 64 &&
+						q->mag_g  < 64 )
 						stat[stat_cnt] |= (1<<20);//7777
 				}
 				else {
-					if( q->avg_gr > -3 && q->avg_gr < 2 &&
-						q->avg_g  > -5 && q->avg_g  < 4 &&
-						q->avg_gb > -3 && q->avg_gb < 2 )
+					if( q->mag_rb < 2 && q->mag_g  < 4 )
 						stat[stat_cnt] |= (1|(511<<12));//all
-					else if( q->avg_gr > -5 && q->avg_gr < 4 &&
-						q->avg_g >  -9 && q->avg_g  < 8 &&
-						q->avg_gb > -5 && q->avg_gb < 4 )
+					else if( q->mag_rb < 4 && q->mag_g  < 8 )
 						stat[stat_cnt] |= (511<<12);//3433+
-					else if( q->avg_gr >  -9 && q->avg_gr <  8 &&
-						q->avg_g  > -17 && q->avg_g  < 16 &&
-						q->avg_gb >  -9 && q->avg_gb <  8 )
+					else if( q->mag_rb <  8 && q->mag_g  < 16 )
 						stat[stat_cnt] |= (255<<13);//454+
-					else if( q->avg_gr >  -9 && q->avg_gr <  8 &&
-						q->avg_g  > -33 && q->avg_g  < 32 &&
-						q->avg_gb >  -9 && q->avg_gb <  8 )
+					else if( q->mag_rb <  8 && q->mag_g  < 32 )
 						stat[stat_cnt] |= (127<<14);//464+
-					else if( q->avg_gr > -17 && q->avg_gr < 16 &&
-						q->avg_g  > -33 && q->avg_g  < 32 &&
-						q->avg_gb > -17 && q->avg_gb < 16 )
+					else if( q->mag_rb < 16 && q->mag_g  < 32 )
 						stat[stat_cnt] |= (31<<16);//5654+
-					else if( q->avg_gr > -33 && q->avg_gr < 32 &&
-						q->avg_g  > -65 && q->avg_g  < 64 &&
-						q->avg_gb > -33 && q->avg_gb < 32 )
+					else if( q->mag_rb < 32 && q->mag_g  < 64 )
 						stat[stat_cnt] |= (15<<17);//676+
 					else {
-						if( q->avg_gr > -33 && q->avg_gr < 32 &&
-							q->avg_gb > -33 && q->avg_gb < 32 )
+						if( q->mag_rb < 32 )
 							stat[stat_cnt] |= (3<<18);//686 787
-						else if( q->avg_gr > -65 && q->avg_gr < 64 &&
-							q->avg_gb > -65 && q->avg_gb < 64 )
+						else if( q->mag_rb < 64 )
 							stat[stat_cnt] |= (1<<19);//787
 						/*intentionally no else, 7777 not a superset of 686/787*/
-						if( q->avg_gr > -65 && q->avg_gr < 64 &&
-							q->avg_g  > -65 && q->avg_g  < 64 &&
-							q->avg_gb > -65 && q->avg_gb < 64 )//7777
+						if( q->mag_rb < 64 && q->mag_g  < 64 )//7777
 							stat[stat_cnt] |= (1<<20);
 					}
 				}
 				/* Unique ops */
 				if(q->va==0) {
 					if( q->avg_g > -5 && q->avg_g < 0 &&
-						q->avg_gr > -2 && q->avg_gr < 3 &&
+						q->avg_gr > -2 && q->avg_gr < 3 &&//cannot use mag
 						q->avg_gb > -2 && q->avg_gb < 3 )
 						stat[stat_cnt] |= (1 << 1);//232b
-					else if( q->avg_g   > -1 && q->avg_g   < 4 &&
-						q->avg_gr > -3 && q->avg_gr < 2 &&
-						q->avg_gb > -3 && q->avg_gb < 2 )
+					else if( q->avg_g > -1 && q->avg_g < 4 &&
+						q->mag_rb < 2 )
 						stat[stat_cnt] |= (1 << 1);//232b
 					if( q->avg_r > -3 && q->avg_r < 2 &&
-						q->avg_g > -3 && q->avg_g < 2 &&
+						q->mag_g < 2 &&
 						q->avg_b > -3 && q->avg_b < 2 )
 						stat[stat_cnt] |= (1 << 3);//diff 222
 					if( q->avg_r > -2 && q->avg_r < 2 &&
