@@ -105,6 +105,7 @@ void *qoip_read(const char *filename, qoip_desc *desc, int channels) {
 	FILE *f = fopen(filename, "rb");
 	size_t max_size, size;
 	void *pixels, *data, *scratch = NULL;
+	int decode_ret;
 
 	if (!f)
 		return NULL;
@@ -116,31 +117,38 @@ void *qoip_read(const char *filename, qoip_desc *desc, int channels) {
 		return NULL;
 	}
 	rewind(f);
-	data = QOIP_MALLOC(size);
-	if (!data) {
+	if( !(data = QOIP_MALLOC(size)) ) {
 		fclose(f);
 		return NULL;
 	}
 
 	if( fread(data, 1, size, f)!=size ) {
-		return 0;
+		QOIP_FREE(data);
+		return NULL;
 	}
 	fclose(f);
 
 	qoip_read_header(data, NULL, desc);
 	max_size = qoip_maxsize_raw(desc, channels);
-	pixels = QOIP_MALLOC(max_size);
-	if(desc->entropy)
-		scratch = QOIP_MALLOC(desc->raw_cnt);
-	if (
-		!pixels || !scratch ||
-		qoip_decode(data, size, desc, channels, pixels, scratch)
-	) {
+	if( !(pixels = QOIP_MALLOC(max_size)) ) {
+		QOIP_FREE(data);
+		return NULL;
+	}
+	if(desc->entropy) {
+		if( !(scratch = QOIP_MALLOC(desc->raw_cnt)) )
+			return NULL;
+	}
+	if ( (decode_ret=qoip_decode(data, size, desc, channels, pixels, scratch)) ) {
+		QOIP_FREE(data);
 		QOIP_FREE(pixels);
+		if(scratch)
+			QOIP_FREE(scratch);
 		return 0;
 	}
 
 	QOIP_FREE(data);
+	if(scratch)
+		QOIP_FREE(scratch);
 	return pixels;
 }
 

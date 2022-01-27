@@ -54,7 +54,6 @@ void qoip_dec_index8(qoip_working_t *q) {
 	q->px = q->index2[q->in[q->p++]];
 }
 
-/* === Length 1 RGB delta functions */
 int qoip_enc_delta(qoip_working_t *q, u8 opcode) {
 	if (
 		q->va == 0 &&
@@ -142,145 +141,6 @@ void qoip_dec_luma1_232_bias(qoip_working_t *q) {
 	}
 }
 
-int qoip_enc_luma1_232(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va == 0 &&
-		q->avg_gr > -3 && q->avg_gr < 2 &&
-		q->avg_g >   -5 && q->avg_g <   4 &&
-		q->avg_gb > -3 && q->avg_gb < 2
-	) {
-		q->out[q->p++] = opcode | ((q->avg_g + 4) << 4) | ((q->avg_gr + 2) << 2) | (q->avg_gb + 2);
-		return 1;
-	}
-	return 0;
-}
-void qoip_dec_luma1_232(qoip_working_t *q) {
-	int b1 = q->in[q->p++];
-	int vg = ((b1 >> 4) - 4);
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 2 + ((b1 >> 2) & 0x03);
-	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 2 + ((b1     ) & 0x03);
-}
-
-/* === Length 2 RGB delta functions */
-int qoip_enc_luma2_454(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -9 && q->avg_gr <  8 &&
-		q->avg_g   > -17 && q->avg_g   < 16 &&
-		q->avg_gb >  -9 && q->avg_gb <  8
-	) {
-		q->out[q->p++] = opcode               | (q->avg_g  + 16);
-		q->out[q->p++] = (q->avg_gr + 8) << 4 | (q->avg_gb +  8);
-		return 1;
-	}
-	return 0;
-}
-void qoip_dec_luma2_454(qoip_working_t *q) {
-	int b1 = q->in[q->p++];
-	int b2 = q->in[q->p++];
-	int vg = (b1 & 0x1f) - 16;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 8 + ((b2 >> 4) & 0x0f);
-	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 8 +  (b2       & 0x0f);
-}
-
-int qoip_enc_luma2_464(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -9 && q->avg_gr <  8 &&
-		q->avg_g   > -33 && q->avg_g   < 32 &&
-		q->avg_gb >  -9 && q->avg_gb <  8
-	) {
-		q->out[q->p++] = opcode             | (q->avg_g   + 32);
-		q->out[q->p++] = (q->avg_gr + 8) << 4 | (q->avg_gb +  8);
-		return 1;
-	}
-	return 0;
-}
-void qoip_dec_luma2_464(qoip_working_t *q) {
-	int b1 = q->in[q->p++];
-	int b2 = q->in[q->p++];
-	int vg = (b1 & 0x3f) - 32;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 8 + ((b2 >> 4) & 0x0f);
-	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 8 +  (b2       & 0x0f);
-}
-
-/* === Length 3 RGB delta functions */
-int qoip_enc_luma3_676(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va == 0 &&
-		q->avg_gr > -33 && q->avg_gr < 32 &&
-		q->avg_g   > -65 && q->avg_g   < 64 &&
-		q->avg_gb > -33 && q->avg_gb < 32
-	) {
-		q->out[q->p++] = opcode  | ((q->avg_g + 64) >> 4);
-		q->out[q->p++] = (((q->avg_g   + 64) & 0x0f) << 4) | ((q->avg_gb + 32) >> 2);
-		q->out[q->p++] = (((q->avg_gb + 32) & 0x03) << 6) | ( q->avg_gr + 32      );
-		return 1;
-	}
-	return 0;
-}
-void qoip_dec_luma3_676(qoip_working_t *q) {
-	int b1 = q->in[q->p++];
-	int b2 = q->in[q->p++];
-	int b3 = q->in[q->p++];
-	int vg = (((b1 & 0x07) << 4) | (b2 >> 4)) - 64;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 32 + (b3 & 0x3f);
-	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 32 + (((b2 & 0x0f) << 2) | ((b3 >> 6) & 0x03));
-}
-
-
-int qoip_enc_luma3_686(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -33 && q->avg_gr <  32 &&
-		q->avg_gb >  -33 && q->avg_gb <  32
-	) {
-		q->out[q->p++] = opcode                      | ((q->avg_gr + 32) >> 2);
-		q->out[q->p++] = (((q->avg_gr + 32) & 3) << 6) |  (q->avg_gb + 32);
-		q->out[q->p++] = q->avg_g + 128;
-		return 1;
-	}
-	return 0;
-}
-void qoip_dec_luma3_686(qoip_working_t *q) {
-	int b1 = q->in[q->p++];
-	int b2 = q->in[q->p++];
-	int b3 = q->in[q->p++];
-	int vg = b3 - 128;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 32 + (((b1 & 0x0f) << 2) | ((b2) >> 6));
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 32 + (b2 & 0x3f);
-	q->px.rgba.g = q->px_ref.rgba.g + vg;
-}
-
-
-int qoip_enc_luma3_787(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va == 0 &&
-		q->avg_gr >  -65 && q->avg_gr <  64 &&
-		q->avg_gb >  -65 && q->avg_gb <  64
-	) {
-		q->out[q->p++] = opcode                      | ((q->avg_gr + 64) >> 1);
-		q->out[q->p++] = q->avg_g + 128;
-		q->out[q->p++] = (((q->avg_gr + 64) & 1) << 7) |  (q->avg_gb + 64);
-		return 1;
-	}
-	return 0;
-}
-void qoip_dec_luma3_787(qoip_working_t *q) {
-	int b1 = q->in[q->p++];
-	int b2 = q->in[q->p++];
-	int b3 = q->in[q->p++];
-	int vg = b2 - 128;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 64 + (((b1 & 0x3f) << 1) | ((b3) >> 7));
-	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 64 + (b3 & 0x7f);
-}
-
-/* === length 1 RGBA delta functions */
 int qoip_enc_deltaa(qoip_working_t *q, u8 opcode) {
 	if (
 		(q->va == -1 || q->va == 1) &&
@@ -328,7 +188,6 @@ void qoip_dec_deltaa(qoip_working_t *q) {
 	}
 }
 
-/* === Length 2 RGBA delta functions */
 int qoip_enc_a(qoip_working_t *q, u8 opcode) {
 	if ( q->vr == 0 && q->vg == 0 && q->vb == 0 ) {
 		q->out[q->p++] = opcode;
@@ -342,104 +201,850 @@ void qoip_dec_a(qoip_working_t *q) {
 	q->px.rgba.a = q->in[q->p++];
 }
 
-int qoip_enc_luma2_3433(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va   >  -5 && q->va   <  4 &&
-		q->avg_gr >  -5 && q->avg_gr <  4 &&
-		q->avg_g   >  -9 && q->avg_g   <  8 &&
-		q->avg_gb >  -5 && q->avg_gb <  4
-	) {/* tttrrrbb baaagggg */
-		q->out[q->p++] = opcode      | (q->avg_gr + 4) << 2 | (q->avg_gb + 4) >> 1;
-		q->out[q->p++] = ((q->avg_gb + 4) & 1) << 7 | (q->va + 4) << 4 | (q->avg_g + 8);
+/* Generated LUMA functions */
+static inline int qoip_enc_luma1_222(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -3 && q->avg_gr < 2 &&
+		q->avg_g  > -3 && q->avg_g  < 2 &&
+		q->avg_gb > -3 && q->avg_gb < 2 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 2) << 4) | ((q->avg_gr + 2) << 2) | ((q->avg_gb + 2) << 0);
 		return 1;
 	}
 	return 0;
 }
-void qoip_dec_luma2_3433(qoip_working_t *q) {
+static inline void qoip_dec_luma1_222(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
-	int b2 = q->in[q->p++];
-	int vg = (b2 & 0xf) - 8;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 4 + ((b1 >> 2) & 7);
+	int vg = ((b1 >> 4) & 3) - 2;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b1 >> 2) & 3) - 2;
 	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 4 + ((b1 & 3) << 1) + (b2 >> 7);
-	q->px.rgba.a += ((b2 >> 4) & 7) - 4;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b1 >> 0) & 3) - 2;
 }
 
-/* === Length 3 RGBA delta functions */
-int qoip_enc_luma3_4645(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va   > -17 && q->va   < 16 &&
-		q->avg_gr >  -9 && q->avg_gr <  8 &&
-		q->avg_g   > -33 && q->avg_g   < 32 &&
-		q->avg_gb >  -9 && q->avg_gb <  8
-	) {
-		q->out[q->p++] = opcode      | ((q->avg_g   + 32) >> 3);
-		q->out[q->p++] = (((q->avg_g + 32) & 0x07) << 5) | (q->va +  16);
-		q->out[q->p++] = (q->avg_gr + 8) << 4 | (q->avg_gb +  8);
+static inline int qoip_enc_luma1_232(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -3 && q->avg_gr < 2 &&
+		q->avg_g  > -5 && q->avg_g  < 4 &&
+		q->avg_gb > -3 && q->avg_gb < 2 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 4) << 4) | ((q->avg_gr + 2) << 2) | ((q->avg_gb + 2) << 0);
 		return 1;
 	}
 	return 0;
 }
-void qoip_dec_luma3_4645(qoip_working_t *q) {
+static inline void qoip_dec_luma1_232(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
-	int b2 = q->in[q->p++];
-	int b3 = q->in[q->p++];
-	int vg = (((b1 & 0x07) << 3) | (b2 >> 5)) - 32;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 8 + ((b3 >> 4) & 0x0f);
+	int vg = ((b1 >> 4) & 7) - 4;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b1 >> 2) & 3) - 2;
 	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 8 +  (b3       & 0x0f);
-	q->px.rgba.a += (b2 & 0x1f) - 16;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b1 >> 0) & 3) - 2;
 }
 
-int qoip_enc_luma3_5654(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va   >  -9 && q->va    < 8 &&
+static inline int qoip_enc_luma2_242(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -3 && q->avg_gr < 2 &&
+		q->avg_g  > -9 && q->avg_g  < 8 &&
+		q->avg_gb > -3 && q->avg_gb < 2 ) {
+		q->out[q->p++] = opcode;
+		q->out[q->p++] = ((q->avg_g + 8) << 4) | ((q->avg_gr + 2) << 2) | ((q->avg_gb + 2) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_242(qoip_working_t *q) {
+	++q->p;
+	int b2 = q->in[q->p++];
+	int vg = ((b2 >> 4) & 15) - 8;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 2) & 3) - 2;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 3) - 2;
+}
+
+static inline int qoip_enc_luma2_333(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -5 && q->avg_gr < 4 &&
+		q->avg_g  > -5 && q->avg_g  < 4 &&
+		q->avg_gb > -5 && q->avg_gb < 4 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 4) >> 2);
+		q->out[q->p++] = ((q->avg_g + 4) & 3) << 6 | ((q->avg_gr + 4) << 3) | ((q->avg_gb + 4) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_333(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = (((b1 & 1) << 2) | (b2 >> 6)) - 4;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 3) & 7) - 4;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 7) - 4;
+}
+
+static inline int qoip_enc_luma2_343(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -5 && q->avg_gr < 4 &&
+		q->avg_g  > -9 && q->avg_g  < 8 &&
+		q->avg_gb > -5 && q->avg_gb < 4 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 8) >> 2);
+		q->out[q->p++] = ((q->avg_g + 8) & 3) << 6 | ((q->avg_gr + 4) << 3) | ((q->avg_gb + 4) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_343(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = (((b1 & 3) << 2) | (b2 >> 6)) - 8;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 3) & 7) - 4;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 7) - 4;
+}
+
+static inline int qoip_enc_luma2_353(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -5 && q->avg_gr < 4 &&
+		q->avg_g  > -17 && q->avg_g  < 16 &&
+		q->avg_gb > -5 && q->avg_gb < 4 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 16) >> 2);
+		q->out[q->p++] = ((q->avg_g + 16) & 3) << 6 | ((q->avg_gr + 4) << 3) | ((q->avg_gb + 4) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_353(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = (((b1 & 7) << 2) | (b2 >> 6)) - 16;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 3) & 7) - 4;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 7) - 4;
+}
+
+static inline int qoip_enc_luma2_444(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -9 && q->avg_gr < 8 &&
+		q->avg_g  > -9 && q->avg_g  < 8 &&
+		q->avg_gb > -9 && q->avg_gb < 8 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 8) << 0);
+		q->out[q->p++] = ((q->avg_gr + 8) << 4) | ((q->avg_gb + 8) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_444(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 0) & 15) - 8;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
+}
+
+static inline int qoip_enc_luma2_454(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -9 && q->avg_gr < 8 &&
+		q->avg_g  > -17 && q->avg_g  < 16 &&
+		q->avg_gb > -9 && q->avg_gb < 8 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 16) << 0);
+		q->out[q->p++] = ((q->avg_gr + 8) << 4) | ((q->avg_gb + 8) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_454(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 0) & 31) - 16;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
+}
+
+static inline int qoip_enc_luma2_464(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -9 && q->avg_gr < 8 &&
+		q->avg_g  > -33 && q->avg_g  < 32 &&
+		q->avg_gb > -9 && q->avg_gb < 8 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 32) << 0);
+		q->out[q->p++] = ((q->avg_gr + 8) << 4) | ((q->avg_gb + 8) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_464(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 0) & 63) - 32;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
+}
+
+static inline int qoip_enc_luma2_555(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
 		q->avg_gr > -17 && q->avg_gr < 16 &&
-		q->avg_g   > -33 && q->avg_g   < 32 &&
-		q->avg_gb > -17 && q->avg_gb < 16
-	) {/* ttttaaaa rrrrrbbb bbgggggg */
-		q->out[q->p++] = opcode | (q->va   + 8);
-		q->out[q->p++] = (q->avg_gr + 16) << 3 | ((q->avg_gb + 16) >> 2);
-		q->out[q->p++] = ((q->avg_gb + 16) & 3) << 6 | (q->avg_g + 32);
+		q->avg_g  > -17 && q->avg_g  < 16 &&
+		q->avg_gb > -17 && q->avg_gb < 16 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 16) << 2) | ((q->avg_gr + 16) >> 3);
+		q->out[q->p++] = (((q->avg_gr + 16) & 7) << 5) | ((q->avg_gb + 16) << 0);
 		return 1;
 	}
 	return 0;
 }
-void qoip_dec_luma3_5654(qoip_working_t *q) {
+static inline void qoip_dec_luma2_555(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 2) & 31) - 16;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 3) << 3) | (b2 >> 5)) - 16;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 31) - 16;
+}
+
+static inline int qoip_enc_luma3_565(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -17 && q->avg_gr < 16 &&
+		q->avg_g  > -33 && q->avg_g  < 32 &&
+		q->avg_gb > -17 && q->avg_gb < 16 ) {
+		q->out[q->p++] = opcode;
+		q->out[q->p++] = ((q->avg_g + 32) << 2) | ((q->avg_gr + 16) >> 3);
+		q->out[q->p++] = (((q->avg_gr + 16) & 7) << 5) | ((q->avg_gb + 16) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_565(qoip_working_t *q) {
+	++q->p;
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = ((b2 >> 2) & 63) - 32;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 31) - 16;
+}
+
+static inline int qoip_enc_luma3_575(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -17 && q->avg_gr < 16 &&
+		q->avg_g  > -65 && q->avg_g  < 64 &&
+		q->avg_gb > -17 && q->avg_gb < 16 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 64) >> 6);
+		q->out[q->p++] = ((q->avg_g + 64) & 63) << 2 | ((q->avg_gr + 16) >> 3);
+		q->out[q->p++] = (((q->avg_gr + 16) & 7) << 5) | ((q->avg_gb + 16) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_575(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
-	int vg = (b3 & 0x3f) - 32;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 16 + ((b2 >> 3) & 0x1f);
+	int vg = (((b1 & 1) << 6) | (b2 >> 2)) - 64;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
 	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 16 +  (((b2 & 7) << 2) | (b3 >> 6));
-	q->px.rgba.a += (b1 & 0x0f) - 8;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 31) - 16;
 }
 
-/* === Length 4 RGBA delta functions */
-int qoip_enc_luma4_7777(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va   > -65 && q->va   < 64 &&
-		q->avg_gr > -65 && q->avg_gr < 64 &&
-		q->avg_g   > -65 && q->avg_g   < 64 &&
-		q->avg_gb > -65 && q->avg_gb < 64
-	) {/* ttttrrrr rrrggggg ggbbbbbb baaaaaaa */
-		q->out[q->p++] = opcode                      | ((q->avg_gr + 64) >> 3);
-		q->out[q->p++] = (((q->avg_gr + 64) & 7) << 5) | ((q->avg_g   + 64) >> 2);
-		q->out[q->p++] = (((q->avg_g   + 64) & 3) << 6) | ((q->avg_gb + 64) >> 1);
-		q->out[q->p++] = (((q->avg_gb + 64) & 1) << 7) | ((q->va   + 64)     );
+static inline int qoip_enc_luma3_666(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -33 && q->avg_gr < 32 &&
+		q->avg_g  > -33 && q->avg_g  < 32 &&
+		q->avg_gb > -33 && q->avg_gb < 32 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 32) >> 4);
+		q->out[q->p++] = ((q->avg_g + 32) & 15) << 4 | ((q->avg_gr + 32) >> 2);
+		q->out[q->p++] = (((q->avg_gr + 32) & 3) << 6) | ((q->avg_gb + 32) << 0);
 		return 1;
 	}
 	return 0;
 }
-void qoip_dec_luma4_7777(qoip_working_t *q) {
+static inline void qoip_dec_luma3_666(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 3) << 4) | (b2 >> 4)) - 32;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
+}
+
+static inline int qoip_enc_luma3_676(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -33 && q->avg_gr < 32 &&
+		q->avg_g  > -65 && q->avg_g  < 64 &&
+		q->avg_gb > -33 && q->avg_gb < 32 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 64) >> 4);
+		q->out[q->p++] = ((q->avg_g + 64) & 15) << 4 | ((q->avg_gr + 32) >> 2);
+		q->out[q->p++] = (((q->avg_gr + 32) & 3) << 6) | ((q->avg_gb + 32) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_676(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 7) << 4) | (b2 >> 4)) - 64;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
+}
+
+static inline int qoip_enc_luma3_686(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -33 && q->avg_gr < 32 &&
+		q->avg_gb > -33 && q->avg_gb < 32 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 128) >> 4);
+		q->out[q->p++] = ((q->avg_g + 128) & 15) << 4 | ((q->avg_gr + 32) >> 2);
+		q->out[q->p++] = (((q->avg_gr + 32) & 3) << 6) | ((q->avg_gb + 32) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_686(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 15) << 4) | (b2 >> 4)) - 128;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
+}
+
+static inline int qoip_enc_luma3_777(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -65 && q->avg_gr < 64 &&
+		q->avg_g  > -65 && q->avg_g  < 64 &&
+		q->avg_gb > -65 && q->avg_gb < 64 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 64) >> 2);
+		q->out[q->p++] = ((q->avg_g + 64) & 3) << 6 | ((q->avg_gr + 64) >> 1);
+		q->out[q->p++] = (((q->avg_gr + 64) & 1) << 7) | ((q->avg_gb + 64) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_777(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 31) << 2) | (b2 >> 6)) - 64;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 63) << 1) | (b3 >> 7)) - 64;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 127) - 64;
+}
+
+static inline int qoip_enc_luma3_787(qoip_working_t *q, u8 opcode) {
+	if ( q->va==0 &&
+		q->avg_gr > -65 && q->avg_gr < 64 &&
+		q->avg_gb > -65 && q->avg_gb < 64 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 128) >> 2);
+		q->out[q->p++] = ((q->avg_g + 128) & 3) << 6 | ((q->avg_gr + 64) >> 1);
+		q->out[q->p++] = (((q->avg_gr + 64) & 1) << 7) | ((q->avg_gb + 64) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_787(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 63) << 2) | (b2 >> 6)) - 128;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 63) << 1) | (b3 >> 7)) - 64;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 127) - 64;
+}
+
+static inline int qoip_enc_luma2_2321(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -2 && q->va < 1 &&
+		q->avg_gr > -3 && q->avg_gr < 2 &&
+		q->avg_g  > -5 && q->avg_g  < 4 &&
+		q->avg_gb > -3 && q->avg_gb < 2 ) {
+		q->out[q->p++] = opcode;
+		q->out[q->p++] = ((q->avg_g + 4) << 5) | ((q->avg_gr + 2) << 3) | ((q->avg_gb + 2) << 1) | ((q->va + 1) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_2321(qoip_working_t *q) {
+	++q->p;
+	int b2 = q->in[q->p++];
+	int vg = ((b2 >> 5) & 7) - 4;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 3) & 3) - 2;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 1) & 3) - 2;
+	q->px.rgba.a += ((b2 & 1) - 1);
+}
+
+static inline int qoip_enc_luma2_2322(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -3 && q->va < 2 &&
+		q->avg_gr > -3 && q->avg_gr < 2 &&
+		q->avg_g  > -5 && q->avg_g  < 4 &&
+		q->avg_gb > -3 && q->avg_gb < 2 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 4) >> 2);
+		q->out[q->p++] = ((q->avg_g + 4) & 3) << 6 | ((q->avg_gr + 2) << 4) | ((q->avg_gb + 2) << 2) | ((q->va + 2) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_2322(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = (((b1 & 1) << 2) | (b2 >> 6)) - 4;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 3) - 2;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 2) & 3) - 2;
+	q->px.rgba.a += ((b2 & 3) - 2);
+}
+
+static inline int qoip_enc_luma2_2422(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -3 && q->va < 2 &&
+		q->avg_gr > -3 && q->avg_gr < 2 &&
+		q->avg_g  > -9 && q->avg_g  < 8 &&
+		q->avg_gb > -3 && q->avg_gb < 2 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 8) >> 2);
+		q->out[q->p++] = ((q->avg_g + 8) & 3) << 6 | ((q->avg_gr + 2) << 4) | ((q->avg_gb + 2) << 2) | ((q->va + 2) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_2422(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = (((b1 & 3) << 2) | (b2 >> 6)) - 8;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 3) - 2;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 2) & 3) - 2;
+	q->px.rgba.a += ((b2 & 3) - 2);
+}
+
+static inline int qoip_enc_luma2_2423(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -5 && q->va < 4 &&
+		q->avg_gr > -3 && q->avg_gr < 2 &&
+		q->avg_g  > -9 && q->avg_g  < 8 &&
+		q->avg_gb > -3 && q->avg_gb < 2 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 8) >> 1);
+		q->out[q->p++] = ((q->avg_g + 8) & 1) << 7 | ((q->avg_gr + 2) << 5) | ((q->avg_gb + 2) << 3) | ((q->va + 4) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_2423(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = (((b1 & 7) << 1) | (b2 >> 7)) - 8;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 5) & 3) - 2;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 3) & 3) - 2;
+	q->px.rgba.a += ((b2 & 7) - 4);
+}
+
+static inline int qoip_enc_luma2_3432(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -3 && q->va < 2 &&
+		q->avg_gr > -5 && q->avg_gr < 4 &&
+		q->avg_g  > -9 && q->avg_g  < 8 &&
+		q->avg_gb > -5 && q->avg_gb < 4 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 8) << 0);
+		q->out[q->p++] = ((q->avg_gr + 4) << 5) | ((q->avg_gb + 4) << 2) | ((q->va + 2) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_3432(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 0) & 15) - 8;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 5) & 7) - 4;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 2) & 7) - 4;
+	q->px.rgba.a += ((b2 & 3) - 2);
+}
+
+static inline int qoip_enc_luma2_3433(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -5 && q->va < 4 &&
+		q->avg_gr > -5 && q->avg_gr < 4 &&
+		q->avg_g  > -9 && q->avg_g  < 8 &&
+		q->avg_gb > -5 && q->avg_gb < 4 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 8) << 1) | ((q->avg_gr + 4) >> 2);
+		q->out[q->p++] = (((q->avg_gr + 4) & 3) << 6) | ((q->avg_gb + 4) << 3) | ((q->va + 4) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_3433(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 1) & 15) - 8;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 1) << 2) | (b2 >> 6)) - 4;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 3) & 7) - 4;
+	q->px.rgba.a += ((b2 & 7) - 4);
+}
+
+static inline int qoip_enc_luma2_3533(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -5 && q->va < 4 &&
+		q->avg_gr > -5 && q->avg_gr < 4 &&
+		q->avg_g  > -17 && q->avg_g  < 16 &&
+		q->avg_gb > -5 && q->avg_gb < 4 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 16) << 1) | ((q->avg_gr + 4) >> 2);
+		q->out[q->p++] = (((q->avg_gr + 4) & 3) << 6) | ((q->avg_gb + 4) << 3) | ((q->va + 4) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_3533(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 1) & 31) - 16;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 1) << 2) | (b2 >> 6)) - 4;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 3) & 7) - 4;
+	q->px.rgba.a += ((b2 & 7) - 4);
+}
+
+static inline int qoip_enc_luma2_3534(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -9 && q->va < 8 &&
+		q->avg_gr > -5 && q->avg_gr < 4 &&
+		q->avg_g  > -17 && q->avg_g  < 16 &&
+		q->avg_gb > -5 && q->avg_gb < 4 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 16) << 2) | ((q->avg_gr + 4) >> 1);
+		q->out[q->p++] = (((q->avg_gr + 4) & 1) << 7) | ((q->avg_gb + 4) << 4) | ((q->va + 8) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma2_3534(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int vg = ((b1 >> 2) & 31) - 16;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 3) << 1) | (b2 >> 7)) - 4;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 4) & 7) - 4;
+	q->px.rgba.a += ((b2 & 15) - 8);
+}
+
+static inline int qoip_enc_luma3_4543(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -5 && q->va < 4 &&
+		q->avg_gr > -9 && q->avg_gr < 8 &&
+		q->avg_g  > -17 && q->avg_g  < 16 &&
+		q->avg_gb > -9 && q->avg_gb < 8 ) {
+		q->out[q->p++] = opcode;
+		q->out[q->p++] = ((q->avg_g + 16) << 3) | ((q->avg_gr + 8) >> 1);
+		q->out[q->p++] = (((q->avg_gr + 8) & 1) << 7) | ((q->avg_gb + 8) << 3) | ((q->va + 4) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_4543(qoip_working_t *q) {
+	++q->p;
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = ((b2 >> 3) & 31) - 16;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 7) << 1) | (b3 >> 7)) - 8;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 3) & 15) - 8;
+	q->px.rgba.a += ((b3 & 7) - 4);
+}
+
+static inline int qoip_enc_luma3_4544(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -9 && q->va < 8 &&
+		q->avg_gr > -9 && q->avg_gr < 8 &&
+		q->avg_g  > -17 && q->avg_g  < 16 &&
+		q->avg_gb > -9 && q->avg_gb < 8 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 16) >> 4);
+		q->out[q->p++] = ((q->avg_g + 16) & 15) << 4 | ((q->avg_gr + 8) << 0);
+		q->out[q->p++] = ((q->avg_gb + 8) << 4) | ((q->va + 8) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_4544(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 1) << 4) | (b2 >> 4)) - 16;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 0) & 15) - 8;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 4) & 15) - 8;
+	q->px.rgba.a += ((b3 & 15) - 8);
+}
+
+static inline int qoip_enc_luma3_4644(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -9 && q->va < 8 &&
+		q->avg_gr > -9 && q->avg_gr < 8 &&
+		q->avg_g  > -33 && q->avg_g  < 32 &&
+		q->avg_gb > -9 && q->avg_gb < 8 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 32) >> 4);
+		q->out[q->p++] = ((q->avg_g + 32) & 15) << 4 | ((q->avg_gr + 8) << 0);
+		q->out[q->p++] = ((q->avg_gb + 8) << 4) | ((q->va + 8) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_4644(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 3) << 4) | (b2 >> 4)) - 32;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 0) & 15) - 8;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 4) & 15) - 8;
+	q->px.rgba.a += ((b3 & 15) - 8);
+}
+
+static inline int qoip_enc_luma3_4645(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -17 && q->va < 16 &&
+		q->avg_gr > -9 && q->avg_gr < 8 &&
+		q->avg_g  > -33 && q->avg_g  < 32 &&
+		q->avg_gb > -9 && q->avg_gb < 8 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 32) >> 3);
+		q->out[q->p++] = ((q->avg_g + 32) & 7) << 5 | ((q->avg_gr + 8) << 1) | ((q->avg_gb + 8) >> 3);
+		q->out[q->p++] = (((q->avg_gb + 8) & 7) << 5) | ((q->va + 16) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_4645(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 7) << 3) | (b2 >> 5)) - 32;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 1) & 15) - 8;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 1) << 3) | (b3 >> 5)) - 8;
+	q->px.rgba.a += ((b3 & 31) - 16);
+}
+
+static inline int qoip_enc_luma3_5654(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -9 && q->va < 8 &&
+		q->avg_gr > -17 && q->avg_gr < 16 &&
+		q->avg_g  > -33 && q->avg_g  < 32 &&
+		q->avg_gb > -17 && q->avg_gb < 16 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 32) >> 2);
+		q->out[q->p++] = ((q->avg_g + 32) & 3) << 6 | ((q->avg_gr + 16) << 1) | ((q->avg_gb + 16) >> 4);
+		q->out[q->p++] = (((q->avg_gb + 16) & 15) << 4) | ((q->va + 8) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_5654(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 15) << 2) | (b2 >> 6)) - 32;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 1) & 31) - 16;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 1) << 4) | (b3 >> 4)) - 16;
+	q->px.rgba.a += ((b3 & 15) - 8);
+}
+
+static inline int qoip_enc_luma3_5655(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -17 && q->va < 16 &&
+		q->avg_gr > -17 && q->avg_gr < 16 &&
+		q->avg_g  > -33 && q->avg_g  < 32 &&
+		q->avg_gb > -17 && q->avg_gb < 16 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 32) >> 1);
+		q->out[q->p++] = ((q->avg_g + 32) & 1) << 7 | ((q->avg_gr + 16) << 2) | ((q->avg_gb + 16) >> 3);
+		q->out[q->p++] = (((q->avg_gb + 16) & 7) << 5) | ((q->va + 16) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_5655(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 31) << 1) | (b2 >> 7)) - 32;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 2) & 31) - 16;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
+	q->px.rgba.a += ((b3 & 31) - 16);
+}
+
+static inline int qoip_enc_luma3_5755(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -17 && q->va < 16 &&
+		q->avg_gr > -17 && q->avg_gr < 16 &&
+		q->avg_g  > -65 && q->avg_g  < 64 &&
+		q->avg_gb > -17 && q->avg_gb < 16 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 64) >> 1);
+		q->out[q->p++] = ((q->avg_g + 64) & 1) << 7 | ((q->avg_gr + 16) << 2) | ((q->avg_gb + 16) >> 3);
+		q->out[q->p++] = (((q->avg_gb + 16) & 7) << 5) | ((q->va + 16) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_5755(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = (((b1 & 63) << 1) | (b2 >> 7)) - 64;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 2) & 31) - 16;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
+	q->px.rgba.a += ((b3 & 31) - 16);
+}
+
+static inline int qoip_enc_luma3_5756(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -33 && q->va < 32 &&
+		q->avg_gr > -17 && q->avg_gr < 16 &&
+		q->avg_g  > -65 && q->avg_g  < 64 &&
+		q->avg_gb > -17 && q->avg_gb < 16 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 64) << 0);
+		q->out[q->p++] = ((q->avg_gr + 16) << 3) | ((q->avg_gb + 16) >> 2);
+		q->out[q->p++] = (((q->avg_gb + 16) & 3) << 6) | ((q->va + 32) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma3_5756(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int vg = ((b1 >> 0) & 127) - 64;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 3) & 31) - 16;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 7) << 2) | (b3 >> 6)) - 16;
+	q->px.rgba.a += ((b3 & 63) - 32);
+}
+
+static inline int qoip_enc_luma4_6765(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -17 && q->va < 16 &&
+		q->avg_gr > -33 && q->avg_gr < 32 &&
+		q->avg_g  > -65 && q->avg_g  < 64 &&
+		q->avg_gb > -33 && q->avg_gb < 32 ) {
+		q->out[q->p++] = opcode;
+		q->out[q->p++] = ((q->avg_g + 64) << 1) | ((q->avg_gr + 32) >> 5);
+		q->out[q->p++] = (((q->avg_gr + 32) & 31) << 3) | ((q->avg_gb + 32) >> 3);
+		q->out[q->p++] = (((q->avg_gb + 32) & 7) << 5) | ((q->va + 16) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma4_6765(qoip_working_t *q) {
+	++q->p;
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int b4 = q->in[q->p++];
+	int vg = ((b2 >> 1) & 127) - 64;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 1) << 5) | (b3 >> 3)) - 32;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b3 & 7) << 3) | (b4 >> 5)) - 32;
+	q->px.rgba.a += ((b4 & 31) - 16);
+}
+
+static inline int qoip_enc_luma4_6766(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -33 && q->va < 32 &&
+		q->avg_gr > -33 && q->avg_gr < 32 &&
+		q->avg_g  > -65 && q->avg_g  < 64 &&
+		q->avg_gb > -33 && q->avg_gb < 32 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 64) >> 6);
+		q->out[q->p++] = ((q->avg_g + 64) & 63) << 2 | ((q->avg_gr + 32) >> 4);
+		q->out[q->p++] = (((q->avg_gr + 32) & 15) << 4) | ((q->avg_gb + 32) >> 2);
+		q->out[q->p++] = (((q->avg_gb + 32) & 3) << 6) | ((q->va + 32) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma4_6766(qoip_working_t *q) {
 	int b1 = q->in[q->p++];
 	int b2 = q->in[q->p++];
 	int b3 = q->in[q->p++];
 	int b4 = q->in[q->p++];
-	int vg = (((b2 & 0x1f) << 2) | (b3 >> 6)) - 64;
-	q->px.rgba.r = q->px_ref.rgba.r + vg - 64 + (((b1 & 0x0f) << 3) | (b2 >> 5));
+	int vg = (((b1 & 1) << 6) | (b2 >> 2)) - 64;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 3) << 4) | (b3 >> 4)) - 32;
 	q->px.rgba.g = q->px_ref.rgba.g + vg;
-	q->px.rgba.b = q->px_ref.rgba.b + vg - 64 + (((b3 & 0x3f) << 1) | (b4 >> 7));
-	q->px.rgba.a += (b4 & 0x7f) - 64;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b3 & 15) << 2) | (b4 >> 6)) - 32;
+	q->px.rgba.a += ((b4 & 63) - 32);
 }
+
+static inline int qoip_enc_luma4_6866(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -33 && q->va < 32 &&
+		q->avg_gr > -33 && q->avg_gr < 32 &&
+		q->avg_gb > -33 && q->avg_gb < 32 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 128) >> 6);
+		q->out[q->p++] = ((q->avg_g + 128) & 63) << 2 | ((q->avg_gr + 32) >> 4);
+		q->out[q->p++] = (((q->avg_gr + 32) & 15) << 4) | ((q->avg_gb + 32) >> 2);
+		q->out[q->p++] = (((q->avg_gb + 32) & 3) << 6) | ((q->va + 32) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma4_6866(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int b4 = q->in[q->p++];
+	int vg = (((b1 & 3) << 6) | (b2 >> 2)) - 128;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 3) << 4) | (b3 >> 4)) - 32;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b3 & 15) << 2) | (b4 >> 6)) - 32;
+	q->px.rgba.a += ((b4 & 63) - 32);
+}
+
+static inline int qoip_enc_luma4_6867(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -65 && q->va < 64 &&
+		q->avg_gr > -33 && q->avg_gr < 32 &&
+		q->avg_gb > -33 && q->avg_gb < 32 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 128) >> 5);
+		q->out[q->p++] = ((q->avg_g + 128) & 31) << 3 | ((q->avg_gr + 32) >> 3);
+		q->out[q->p++] = (((q->avg_gr + 32) & 7) << 5) | ((q->avg_gb + 32) >> 1);
+		q->out[q->p++] = (((q->avg_gb + 32) & 1) << 7) | ((q->va + 64) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma4_6867(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int b4 = q->in[q->p++];
+	int vg = (((b1 & 7) << 5) | (b2 >> 3)) - 128;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 7) << 3) | (b3 >> 5)) - 32;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b3 & 31) << 1) | (b4 >> 7)) - 32;
+	q->px.rgba.a += ((b4 & 127) - 64);
+}
+
+static inline int qoip_enc_luma4_7876(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -33 && q->va < 32 &&
+		q->avg_gr > -65 && q->avg_gr < 64 &&
+		q->avg_gb > -65 && q->avg_gb < 64 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 128) >> 4);
+		q->out[q->p++] = ((q->avg_g + 128) & 15) << 4 | ((q->avg_gr + 64) >> 3);
+		q->out[q->p++] = (((q->avg_gr + 64) & 7) << 5) | ((q->avg_gb + 64) >> 2);
+		q->out[q->p++] = (((q->avg_gb + 64) & 3) << 6) | ((q->va + 32) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma4_7876(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int b4 = q->in[q->p++];
+	int vg = (((b1 & 15) << 4) | (b2 >> 4)) - 128;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 3) | (b3 >> 5)) - 64;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b3 & 31) << 2) | (b4 >> 6)) - 64;
+	q->px.rgba.a += ((b4 & 63) - 32);
+}
+
+static inline int qoip_enc_luma4_7877(qoip_working_t *q, u8 opcode) {
+	if ( q->va > -65 && q->va < 64 &&
+		q->avg_gr > -65 && q->avg_gr < 64 &&
+		q->avg_gb > -65 && q->avg_gb < 64 ) {
+		q->out[q->p++] = opcode | ((q->avg_g + 128) >> 3);
+		q->out[q->p++] = ((q->avg_g + 128) & 7) << 5 | ((q->avg_gr + 64) >> 2);
+		q->out[q->p++] = (((q->avg_gr + 64) & 3) << 6) | ((q->avg_gb + 64) >> 1);
+		q->out[q->p++] = (((q->avg_gb + 64) & 1) << 7) | ((q->va + 64) << 0);
+		return 1;
+	}
+	return 0;
+}
+static inline void qoip_dec_luma4_7877(qoip_working_t *q) {
+	int b1 = q->in[q->p++];
+	int b2 = q->in[q->p++];
+	int b3 = q->in[q->p++];
+	int b4 = q->in[q->p++];
+	int vg = (((b1 & 31) << 3) | (b2 >> 5)) - 128;
+	q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 31) << 2) | (b3 >> 6)) - 64;
+	q->px.rgba.g = q->px_ref.rgba.g + vg;
+	q->px.rgba.b = q->px_ref.rgba.b + vg + (((b3 & 63) << 1) | (b4 >> 7)) - 64;
+	q->px.rgba.a += ((b4 & 127) - 64);
+}
+

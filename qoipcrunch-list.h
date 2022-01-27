@@ -69,4 +69,6 @@ char *qoipcrunch_unified[] = {
 };
 int qoipcrunch_unified_cnt = 64;
 
+char *qoipcrunch_test = ",e0,00,20,40,60,80,02,22,23,e2,26,03,e3,c2,a2,84,65,43,24,04,e4,c3,a3,82,62,45,25,e5,c4,a4,85,66,44,27,05,e6,c5,a5,83,63,46,28,06,e7,c6,a6,86,64,47";
+
 #endif

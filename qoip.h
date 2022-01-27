@@ -95,13 +95,21 @@ enum{QOIP_ENTROPY_NONE, QOIP_ENTROPY_LZ4, QOIP_ENTROPY_ZSTD, QOIP_ENTROPY_ZSTD_D
 new_op: Maintain existing ops by adding to end of mask rows */
 enum{
 	/*MASK1*/OP_INDEX7=0x00, OP_INDEX7F, OP_LUMA1_232B, OP_LUMA1_232,
+	OP_LUMA2_555, OP_LUMA2_3534, OP_LUMA3_5756,
 	/*MASK2*/OP_INDEX6=0x20, OP_INDEX6F, OP_DELTAA, OP_DIFF1_222, OP_LUMA2_464, OP_LUMA3_787,
+	OP_LUMA1_222, OP_LUMA2_3533, OP_LUMA3_5755,
 	/*MASK3*/OP_INDEX5=0x40, OP_INDEX5F, OP_DELTA, OP_LUMA2_454, OP_LUMA2_3433,
-	/*MASK4*/OP_INDEX4=0x60, OP_INDEX4F, OP_LUMA3_686, OP_LUMA3_5654, OP_LUMA4_7777,
+	OP_LUMA3_777, OP_LUMA3_5655, OP_LUMA4_7877,
+	/*MASK4*/OP_INDEX4=0x60, OP_INDEX4F, OP_LUMA3_686, OP_LUMA3_5654, OP_LUMA4_7876,
+	OP_LUMA2_444, OP_LUMA2_3432,
 	/*MASK5*/OP_INDEX3=0x80, OP_INDEX3F, OP_LUMA3_676, OP_LUMA3_4645,
-	/*MASK6*//*OP_=0xa0,*/
-	/*MASK7*//*OP_=0xc0,*/
+	OP_LUMA2_353, OP_LUMA2_2423, OP_LUMA4_6867,
+	/*MASK6*/OP_PLACE2=0xa0, OP_PLACE2F,
+	OP_LUMA2_343, OP_LUMA3_666, OP_LUMA2_2422, OP_LUMA3_4644, OP_LUMA4_6866,
+	/*MASK7*/OP_PLACE1=0xc0, OP_PLACE1F,
+	OP_LUMA2_333, OP_LUMA3_575, OP_LUMA2_2322, OP_LUMA3_4544, OP_LUMA4_6766,
 	/*MASK8*/OP_INDEX8=0xe0, OP_INDEX8F, OP_A,
+	OP_LUMA2_242, OP_LUMA3_565, OP_LUMA2_2321, OP_LUMA3_4543, OP_LUMA4_6765,
 	OP_END
 };
 
@@ -211,36 +219,63 @@ typedef struct {
 #include "qoip-func.c"
 
 /* new_op definitions go here, if qoip_op_lookup remains linear order doesn't matter */
-int qoip_ops_cnt = 21;
+int qoip_ops_cnt = 50;
 const opdef_t qoip_ops[] = {
 	{OP_INDEX7,   QOIP_SET_INDEX1, "OP_INDEX7:     1 byte, 128 value index cache", qoip_enc_index, qoip_dec_index},
-	{OP_LUMA1_232B, QOIP_SET_LEN1, "OP_LUMA1_232B: 1 byte delta, OP_LUMA1_232 but with R and B biased depending on direction of G", qoip_enc_luma1_232_bias, qoip_dec_luma1_232_bias},
-	{OP_LUMA1_232,  QOIP_SET_LEN1, "OP_LUMA1_232:  1 byte delta, (avg_gr  -2..1 , avg_g  -4..3 , avg_gb  -2..1 )", qoip_enc_luma1_232, qoip_dec_luma1_232},
-
 	{OP_INDEX6,   QOIP_SET_INDEX1, "OP_INDEX6: 1 byte,  64 value index cache", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX5,   QOIP_SET_INDEX1, "OP_INDEX5:     1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX4,   QOIP_SET_INDEX1, "OP_INDEX4:     1 byte,  16 value index cache", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX3,   QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index},
+
+	{OP_LUMA1_232B, QOIP_SET_LEN1, "OP_LUMA1_232B: 1 byte delta, OP_LUMA1_232 but with R and B biased depending on direction of G", qoip_enc_luma1_232_bias, qoip_dec_luma1_232_bias},
 	{OP_DELTAA,     QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta, ( avg_r  -1..1 , avg_g  -1..1 ,   avg_b -1..1 , va -1 or 1), AND\n"
                                  "                             (            0 ,            0 ,              0, va  -5..4 )", qoip_enc_deltaa, qoip_dec_deltaa},
 	{OP_DIFF1_222,  QOIP_SET_LEN1, "OP_DIFF1_222:  1 byte delta, ( avg_r  -2..1 , avg_g  -2..1 ,   avg_b -2..1 )", qoip_enc_diff1_222, qoip_dec_diff1_222},
-	{OP_LUMA2_464,  QOIP_SET_LEN2, "OP_LUMA2_464:  2 byte delta, (avg_gr  -8..7 , avg_g -32..31, avg_gb  -8..7 )", qoip_enc_luma2_464, qoip_dec_luma2_464},
-	{OP_LUMA3_787,  QOIP_SET_LEN3, "OP_LUMA3_787:  3 byte delta, (avg_gr -64..63, avg_g        , avg_gb -64..63)", qoip_enc_luma3_787, qoip_dec_luma3_787},
-
-	{OP_INDEX5,   QOIP_SET_INDEX1, "OP_INDEX5:     1 byte,  32 value index cache", qoip_enc_index, qoip_dec_index},
 	{OP_DELTA,      QOIP_SET_LEN1, "OP_DELTA:      1 byte delta, ( avg_r  -1..1 , avg_g  -1..1 ,  avg_b  -1..1 ), AND\n"
                                  "                             (            0 , avg_g  -4..3 ,             0 )", qoip_enc_delta, qoip_dec_delta},
-	{OP_LUMA2_454,  QOIP_SET_LEN2, "OP_LUMA2_454:  2 byte delta, (avg_gr  -8..7 , avg_g -16..15, avg_gb  -8..7 )", qoip_enc_luma2_454, qoip_dec_luma2_454},
-	{OP_LUMA2_3433, QOIP_SET_LEN2, "OP_LUMA2_3433: 2 byte delta, (avg_gr  -4..3 , avg_g  -8..7 , avg_gb  -4..3 , va  -4..3 )", qoip_enc_luma2_3433, qoip_dec_luma2_3433},
-
-	{OP_INDEX4,   QOIP_SET_INDEX1, "OP_INDEX4:     1 byte,  16 value index cache", qoip_enc_index, qoip_dec_index},
-	{OP_LUMA3_686,  QOIP_SET_LEN3, "OP_LUMA3_686:  3 byte delta, (avg_gr -32..31, avg_g        , avg_gb -32..31)", qoip_enc_luma3_686, qoip_dec_luma3_686},
-	{OP_LUMA3_5654, QOIP_SET_LEN3, "OP_LUMA3_5654: 3 byte delta, (avg_gr -16..15, avg_g -32..31, avg_gb -16..15, va  -8..7 )", qoip_enc_luma3_5654, qoip_dec_luma3_5654},
-	{OP_LUMA4_7777, QOIP_SET_LEN4, "OP_LUMA4_7777: 4 byte delta, (avg_gr -64..63, avg_g -64..63, avg_gb -64..63, va -64..63)", qoip_enc_luma4_7777, qoip_dec_luma4_7777},
-
-	{OP_INDEX3,   QOIP_SET_INDEX1, "OP_INDEX3: 1 byte,   8 value index cache", qoip_enc_index, qoip_dec_index},
-	{OP_LUMA3_676,  QOIP_SET_LEN3, "OP_LUMA3_676:  3 byte delta, (avg_gr -32..31, avg_g -64..63, avg_gb -32..31)", qoip_enc_luma3_676, qoip_dec_luma3_676},
-	{OP_LUMA3_4645, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, (avg_gr  -8..7 , avg_g -32..31, avg_gb  -8..7 , va -16..15)", qoip_enc_luma3_4645, qoip_dec_luma3_4645},
+	{OP_LUMA1_222, QOIP_SET_LEN1, "OP_LUMA1_222: 1 byte delta, ( avg_gr - 2.. 1, avg_g  - 2.. 1, avg_gb - 2.. 1 )", qoip_enc_luma1_222, qoip_dec_luma1_222},
+	{OP_LUMA1_232, QOIP_SET_LEN1, "OP_LUMA1_232: 1 byte delta, ( avg_gr - 2.. 1, avg_g  - 4.. 3, avg_gb - 2.. 1 )", qoip_enc_luma1_232, qoip_dec_luma1_232},
 
 	{OP_INDEX8,   QOIP_SET_INDEX2, "OP_INDEX8:     2 byte, 256 value index cache", qoip_enc_index8, qoip_dec_index8},
-	{OP_A,          QOIP_SET_LEN2, "OP_A:          2 byte delta, (            0 ,            0 ,             0 ,  a        )", qoip_enc_a, qoip_dec_a},
+
+	{OP_A,         QOIP_SET_LEN2, "OP_A:          2 byte delta, (            0 ,            0 ,             0 ,  a        )", qoip_enc_a, qoip_dec_a},
+	{OP_LUMA2_242, QOIP_SET_LEN2, "OP_LUMA2_242: 2 byte delta, ( avg_gr - 2.. 1, avg_g  - 8.. 7, avg_gb - 2.. 1 )", qoip_enc_luma2_242, qoip_dec_luma2_242},
+	{OP_LUMA2_333, QOIP_SET_LEN2, "OP_LUMA2_333: 2 byte delta, ( avg_gr - 4.. 3, avg_g  - 4.. 3, avg_gb - 4.. 3 )", qoip_enc_luma2_333, qoip_dec_luma2_333},
+	{OP_LUMA2_343, QOIP_SET_LEN2, "OP_LUMA2_343: 2 byte delta, ( avg_gr - 4.. 3, avg_g  - 8.. 7, avg_gb - 4.. 3 )", qoip_enc_luma2_343, qoip_dec_luma2_343},
+	{OP_LUMA2_353, QOIP_SET_LEN2, "OP_LUMA2_353: 2 byte delta, ( avg_gr - 4.. 3, avg_g  -16..15, avg_gb - 4.. 3 )", qoip_enc_luma2_353, qoip_dec_luma2_353},
+	{OP_LUMA2_444, QOIP_SET_LEN2, "OP_LUMA2_444: 2 byte delta, ( avg_gr - 8.. 7, avg_g  - 8.. 7, avg_gb - 8.. 7 )", qoip_enc_luma2_444, qoip_dec_luma2_444},
+	{OP_LUMA2_454, QOIP_SET_LEN2, "OP_LUMA2_454: 2 byte delta, ( avg_gr - 8.. 7, avg_g  -16..15, avg_gb - 8.. 7 )", qoip_enc_luma2_454, qoip_dec_luma2_454},
+	{OP_LUMA2_464, QOIP_SET_LEN2, "OP_LUMA2_464: 2 byte delta, ( avg_gr - 8.. 7, avg_g  -32..31, avg_gb - 8.. 7 )", qoip_enc_luma2_464, qoip_dec_luma2_464},
+	{OP_LUMA2_555, QOIP_SET_LEN2, "OP_LUMA2_555: 2 byte delta, ( avg_gr -16..15, avg_g  -16..15, avg_gb -16..15 )", qoip_enc_luma2_555, qoip_dec_luma2_555},
+	{OP_LUMA2_2321, QOIP_SET_LEN2, "OP_LUMA2_2321: 2 byte delta, ( avg_gr - 2.. 1, avg_g  - 4.. 3, avg_gb - 2.. 1, va - 1.. 0 )", qoip_enc_luma2_2321, qoip_dec_luma2_2321},
+	{OP_LUMA2_2322, QOIP_SET_LEN2, "OP_LUMA2_2322: 2 byte delta, ( avg_gr - 2.. 1, avg_g  - 4.. 3, avg_gb - 2.. 1, va - 2.. 1 )", qoip_enc_luma2_2322, qoip_dec_luma2_2322},
+	{OP_LUMA2_2422, QOIP_SET_LEN2, "OP_LUMA2_2422: 2 byte delta, ( avg_gr - 2.. 1, avg_g  - 8.. 7, avg_gb - 2.. 1, va - 2.. 1 )", qoip_enc_luma2_2422, qoip_dec_luma2_2422},
+	{OP_LUMA2_2423, QOIP_SET_LEN2, "OP_LUMA2_2423: 2 byte delta, ( avg_gr - 2.. 1, avg_g  - 8.. 7, avg_gb - 2.. 1, va - 4.. 3 )", qoip_enc_luma2_2423, qoip_dec_luma2_2423},
+	{OP_LUMA2_3432, QOIP_SET_LEN2, "OP_LUMA2_3432: 2 byte delta, ( avg_gr - 4.. 3, avg_g  - 8.. 7, avg_gb - 4.. 3, va - 2.. 1 )", qoip_enc_luma2_3432, qoip_dec_luma2_3432},
+	{OP_LUMA2_3433, QOIP_SET_LEN2, "OP_LUMA2_3433: 2 byte delta, ( avg_gr - 4.. 3, avg_g  - 8.. 7, avg_gb - 4.. 3, va - 4.. 3 )", qoip_enc_luma2_3433, qoip_dec_luma2_3433},
+	{OP_LUMA2_3533, QOIP_SET_LEN2, "OP_LUMA2_3533: 2 byte delta, ( avg_gr - 4.. 3, avg_g  -16..15, avg_gb - 4.. 3, va - 4.. 3 )", qoip_enc_luma2_3533, qoip_dec_luma2_3533},
+	{OP_LUMA2_3534, QOIP_SET_LEN2, "OP_LUMA2_3534: 2 byte delta, ( avg_gr - 4.. 3, avg_g  -16..15, avg_gb - 4.. 3, va - 8.. 7 )", qoip_enc_luma2_3534, qoip_dec_luma2_3534},
+	{OP_LUMA3_565, QOIP_SET_LEN3, "OP_LUMA3_565: 3 byte delta, ( avg_gr -16..15, avg_g  -32..31, avg_gb -16..15 )", qoip_enc_luma3_565, qoip_dec_luma3_565},
+	{OP_LUMA3_575, QOIP_SET_LEN3, "OP_LUMA3_575: 3 byte delta, ( avg_gr -16..15, avg_g  -64..63, avg_gb -16..15 )", qoip_enc_luma3_575, qoip_dec_luma3_575},
+	{OP_LUMA3_666, QOIP_SET_LEN3, "OP_LUMA3_666: 3 byte delta, ( avg_gr -32..31, avg_g  -32..31, avg_gb -32..31 )", qoip_enc_luma3_666, qoip_dec_luma3_666},
+	{OP_LUMA3_676, QOIP_SET_LEN3, "OP_LUMA3_676: 3 byte delta, ( avg_gr -32..31, avg_g  -64..63, avg_gb -32..31 )", qoip_enc_luma3_676, qoip_dec_luma3_676},
+	{OP_LUMA3_686, QOIP_SET_LEN3, "OP_LUMA3_686: 3 byte delta, ( avg_gr -32..31, g             , avg_gb -32..31 )", qoip_enc_luma3_686, qoip_dec_luma3_686},
+	{OP_LUMA3_777, QOIP_SET_LEN3, "OP_LUMA3_777: 3 byte delta, ( avg_gr -64..63, avg_g  -64..63, avg_gb -64..63 )", qoip_enc_luma3_777, qoip_dec_luma3_777},
+	{OP_LUMA3_787, QOIP_SET_LEN3, "OP_LUMA3_787: 3 byte delta, ( avg_gr -64..63, g             , avg_gb -64..63 )", qoip_enc_luma3_787, qoip_dec_luma3_787},
+	{OP_LUMA3_4543, QOIP_SET_LEN3, "OP_LUMA3_4543: 3 byte delta, ( avg_gr - 8.. 7, avg_g  -16..15, avg_gb - 8.. 7, va - 4.. 3 )", qoip_enc_luma3_4543, qoip_dec_luma3_4543},
+	{OP_LUMA3_4544, QOIP_SET_LEN3, "OP_LUMA3_4544: 3 byte delta, ( avg_gr - 8.. 7, avg_g  -16..15, avg_gb - 8.. 7, va - 8.. 7 )", qoip_enc_luma3_4544, qoip_dec_luma3_4544},
+	{OP_LUMA3_4644, QOIP_SET_LEN3, "OP_LUMA3_4644: 3 byte delta, ( avg_gr - 8.. 7, avg_g  -32..31, avg_gb - 8.. 7, va - 8.. 7 )", qoip_enc_luma3_4644, qoip_dec_luma3_4644},
+	{OP_LUMA3_4645, QOIP_SET_LEN3, "OP_LUMA3_4645: 3 byte delta, ( avg_gr - 8.. 7, avg_g  -32..31, avg_gb - 8.. 7, va -16..15 )", qoip_enc_luma3_4645, qoip_dec_luma3_4645},
+	{OP_LUMA3_5654, QOIP_SET_LEN3, "OP_LUMA3_5654: 3 byte delta, ( avg_gr -16..15, avg_g  -32..31, avg_gb -16..15, va - 8.. 7 )", qoip_enc_luma3_5654, qoip_dec_luma3_5654},
+	{OP_LUMA3_5655, QOIP_SET_LEN3, "OP_LUMA3_5655: 3 byte delta, ( avg_gr -16..15, avg_g  -32..31, avg_gb -16..15, va -16..15 )", qoip_enc_luma3_5655, qoip_dec_luma3_5655},
+	{OP_LUMA3_5755, QOIP_SET_LEN3, "OP_LUMA3_5755: 3 byte delta, ( avg_gr -16..15, avg_g  -64..63, avg_gb -16..15, va -16..15 )", qoip_enc_luma3_5755, qoip_dec_luma3_5755},
+	{OP_LUMA3_5756, QOIP_SET_LEN3, "OP_LUMA3_5756: 3 byte delta, ( avg_gr -16..15, avg_g  -64..63, avg_gb -16..15, va -32..31 )", qoip_enc_luma3_5756, qoip_dec_luma3_5756},
+	{OP_LUMA4_6765, QOIP_SET_LEN4, "OP_LUMA4_6765: 4 byte delta, ( avg_gr -32..31, avg_g  -64..63, avg_gb -32..31, va -16..15 )", qoip_enc_luma4_6765, qoip_dec_luma4_6765},
+	{OP_LUMA4_6766, QOIP_SET_LEN4, "OP_LUMA4_6766: 4 byte delta, ( avg_gr -32..31, avg_g  -64..63, avg_gb -32..31, va -32..31 )", qoip_enc_luma4_6766, qoip_dec_luma4_6766},
+	{OP_LUMA4_6866, QOIP_SET_LEN4, "OP_LUMA4_6866: 4 byte delta, ( avg_gr -32..31, g             , avg_gb -32..31, va -32..31 )", qoip_enc_luma4_6866, qoip_dec_luma4_6866},
+	{OP_LUMA4_6867, QOIP_SET_LEN4, "OP_LUMA4_6867: 4 byte delta, ( avg_gr -32..31, g             , avg_gb -32..31, va -64..63 )", qoip_enc_luma4_6867, qoip_dec_luma4_6867},
+	{OP_LUMA4_7876, QOIP_SET_LEN4, "OP_LUMA4_7876: 4 byte delta, ( avg_gr -64..63, g             , avg_gb -64..63, va -32..31 )", qoip_enc_luma4_7876, qoip_dec_luma4_7876},
+	{OP_LUMA4_7877, QOIP_SET_LEN4, "OP_LUMA4_7877: 4 byte delta, ( avg_gr -64..63, g             , avg_gb -64..63, va -64..63 )", qoip_enc_luma4_7877, qoip_dec_luma4_7877},
 };
 
 void qoip_print_ops(FILE *io) {
@@ -476,7 +511,7 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 		}
 	}
 	if(index1_present>1)
-		return 5;/* Multiple 1 byte run or index encodings, invalid combination */
+		return 5;/* Multiple 1 byte index encodings, invalid combination */
 	return 0;
 }
 
@@ -779,7 +814,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		return qoip_ret(13, stderr, "qoip_encode: Scratch space needs to be provided for entropy encoding");
 
 	if(opstring == NULL || *opstring==0)
-		opstring = "e04002246263";/*L232B + I5 ...*/
+		opstring = "";//"e04002246263";/*L232B + I5 ...*/
 	if(parse_opstring(opstring, ops, &op_cnt))
 		return qoip_ret(14, stderr, "qoip_encode: Failed to parse opstring");
 	if(qoip_expand_opcodes(&op_cnt, ops, q))

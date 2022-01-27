@@ -94,9 +94,9 @@ static int qoip_effortlevel(char *effort) {
 threads * qoip_maxsize(desc)
 */
 int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, size_t *count, void *tmp, int threads, int entropy) {
-	char currbest_str[256], *next_opstring;
+	char *combination_list, currbest_str[256], *next_opstring;
 	int currbest = -1, j;
-	size_t currbest_len, w_len;
+	size_t currbest_len=-1, w_len;
 	size_t cnt = 0;
 	int level = -1;
 	u8 *scratch = (u8*)tmp;
@@ -105,20 +105,21 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	int list_cnt, thread_cnt;
 	tm_t tm[QOIP_MAX_THREADS] = {0};
 
-	currbest_len = qoip_maxsize(desc);
-
 	level = qoip_effortlevel(effort);
 
-	assert(scratch);
+	assert(scratch);//why?
 
 	if(level==-1) {/* Try every combination in the user-defined list */
-		next_opstring = effort-1;
+		combination_list = (*effort=='t') ? qoipcrunch_test : effort;
+		if(strchr(combination_list, ',')==NULL)/*Escape hatch for single-combination runs to avoid memcpy*/
+			return qoip_encode(data, desc, out, out_len, combination_list, entropy, tmp);
+		next_opstring = combination_list-1;
 		do {
 			++next_opstring;
 			if(qoip_encode(data, desc, working, working_len, next_opstring, 0, NULL))
 				return 1;
 			if(currbest_len>*working_len) {/*copy best to out*/
-				memcpy(out, scratch, *working_len);
+				memcpy(out, working, *working_len);
 				*out_len = *working_len;
 			}
 			++cnt;
@@ -194,7 +195,7 @@ an ops flag resides, and ops are ordered in ascending length so that
 bultin_ctzll can do some magic to eliminate branching. oplen_table is a lookup table
 of op lengths that could possibly be eliminated in favour of some equation
 that generates the length, maybe with the help of a sparse stat integer*/
-static u8 op_table[] = {OP_LUMA1_232, OP_LUMA1_232B, OP_DELTAA, OP_DIFF1_222, OP_DELTA, OP_INDEX3, OP_INDEX4, OP_INDEX5, OP_INDEX6, OP_INDEX7, OP_INDEX8, OP_A, OP_LUMA2_3433, OP_LUMA2_454, OP_LUMA2_464, OP_LUMA3_4645, OP_LUMA3_5654, OP_LUMA3_676, OP_LUMA3_686, OP_LUMA3_787, OP_LUMA4_7777, /*OP_RGB, OP_RGBA*/};
+static u8 op_table[] = {OP_LUMA1_232, OP_LUMA1_232B, OP_DELTAA, OP_DIFF1_222, OP_DELTA, OP_INDEX3, OP_INDEX4, OP_INDEX5, OP_INDEX6, OP_INDEX7, OP_INDEX8, OP_A, OP_LUMA2_3433, OP_LUMA2_454, OP_LUMA2_464, OP_LUMA3_4645, OP_LUMA3_5654, OP_LUMA3_676, OP_LUMA3_686, OP_LUMA3_787, OP_LUMA4_7876, /*OP_RGB, OP_RGBA*/};
 const static u8 oplen_table[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 5};
 
 typedef struct {
@@ -328,19 +329,18 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 					if( q->va > -5 && q->va < 4 &&
 						q->mag_rb < 4 &&
 						q->mag_g  < 8 )
-						stat[stat_cnt] |= ((1<<12)|(3<<15)|(1<<20));//3433 4645 5654 7777
+						stat[stat_cnt] |= ((1<<12)|(3<<15)|(1<<20));//3433 4645 5654 7876
 					else if( q->va   > -17 && q->va   < 16 &&
 						q->mag_rb <  8 &&
 						q->mag_g  < 32 )
-						stat[stat_cnt] |= ((3<<15)|(1<<20));//4645 5654 7777
+						stat[stat_cnt] |= ((3<<15)|(1<<20));//4645 5654 7876
 					else if( q->va   >  -9 && q->va    < 8 &&
 						q->mag_rb < 16 &&
 						q->mag_g  < 32 )
-						stat[stat_cnt] |= ((1<<16)|(1<<20));//5654 7777
-					else if( q->va   > -65 && q->va   < 64 &&
-						q->mag_rb < 64 &&
-						q->mag_g  < 64 )
-						stat[stat_cnt] |= (1<<20);//7777
+						stat[stat_cnt] |= ((1<<16)|(1<<20));//5654 7876
+					else if( q->va   > -33 && q->va   < 32 &&
+						q->mag_rb < 64 )
+						stat[stat_cnt] |= (1<<20);//7876
 				}
 				else {
 					if( q->mag_rb < 2 && q->mag_g  < 4 )
@@ -355,15 +355,10 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 						stat[stat_cnt] |= (31<<16);//5654+
 					else if( q->mag_rb < 32 && q->mag_g  < 64 )
 						stat[stat_cnt] |= (15<<17);//676+
-					else {
-						if( q->mag_rb < 32 )
-							stat[stat_cnt] |= (3<<18);//686 787
-						else if( q->mag_rb < 64 )
-							stat[stat_cnt] |= (1<<19);//787
-						/*intentionally no else, 7777 not a superset of 686/787*/
-						if( q->mag_rb < 64 && q->mag_g  < 64 )//7777
-							stat[stat_cnt] |= (1<<20);
-					}
+					else if( q->mag_rb < 32 )
+						stat[stat_cnt] |= (7<<18);//686 787 7876
+					else if( q->mag_rb < 64 )
+						stat[stat_cnt] |= (3<<19);//787 7876
 				}
 				/* Unique ops */
 				if(q->va==0) {
