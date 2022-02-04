@@ -136,7 +136,7 @@ typedef struct {
 	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
 	i8 vr, vg, vb, va;/*Difference from previous */
 	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/* Difference from average */
-	u8 mag_gr, mag_g, mag_gb, mag_rb;/* Magnitudes of avg* to reduce comparisons */
+	u8 mag_a, mag_gr, mag_g, mag_gb, mag_rb;/* Magnitudes of avg* to reduce comparisons */
 	u8 run1_opcode, run2_opcode, rgb_opcode, rgba_opcode;/* Implicit opcodes */
 } qoip_working_t;
 
@@ -162,6 +162,9 @@ returns >0 on failure or 0 on success. On success out is the encoded data, out_l
 is its size in bytes. opcode_string defines the opcode combination to use. It is up
 to the caller to ensure this string is valid */
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string, int entropy, void *scratch);
+
+/*Init q, used internally by qoip_encode and qoipcrunch_encode_* */
+void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_desc *desc);
 
 /* Return the maximum size of a no-entropy-coding QOIP image with dimensions in desc */
 size_t qoip_maxsize(const qoip_desc *desc);
@@ -528,8 +531,6 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 		ops[i].dec   = opdef->dec;
 		if(ops[i].set==QOIP_SET_INDEX1)
 			q->index1_maxval = ops[i].opcnt - 1;
-	}
-	for(i=0;i<*op_cnt;++i) {
 		ops[i].opcode = op;
 		op += ops[i].opcnt;
 	}
@@ -616,6 +617,7 @@ static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) 
 	size_t p = 0, src_cnt, dst_cnt, loc_bithead, loc_bitstream;
 	ZSTD_CCtx *cctx;
 	qoip_desc d;
+
 	qoip_read_file_header(out, &p, &d);
 	loc_bithead = p;
 	qoip_skip_bitstream_header(out, &p, &d);
@@ -793,14 +795,32 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 	q->index2[q->hash] = q->px;
 }
 
+void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_desc *desc) {
+	int i;
+	q->in = (const unsigned char *)data;
+	q->px.v = 0;
+	q->px.rgba.a = 255;
+	q->width = desc->width;
+	q->height = desc->height;
+	q->channels = desc->channels;
+	q->stride = desc->width * desc->channels;
+	q->upcache[0]=0;
+	q->upcache[1]=0;
+	q->upcache[2]=0;
+	for(i=0;i<(desc->width<8192?desc->width-1:8191);++i) {/* Prefill upcache */
+		q->upcache[((i+1)*3)+0]=q->in[(i*desc->channels)+0];
+		q->upcache[((i+1)*3)+1]=q->in[(i*desc->channels)+1];
+		q->upcache[((i+1)*3)+2]=q->in[(i*desc->channels)+2];
+	}
+}
+
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring, int entropy, void *scratch) {
-	u32 i;
 	int op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];
-	q->out = (unsigned char *) out;
-	q->in = (const unsigned char *)data;
+	q->out = (unsigned char *)out;
+	qoip_init_working_memory(q, data, desc);
 
 	if (
 		data == NULL || desc == NULL || out == NULL || out_len == NULL ||
@@ -819,22 +839,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		return qoip_ret(15, stderr, "qoip_encode: Failed to expand opstring");
 	qoip_write_file_header(q->out, &(q->p), desc);
 	qoip_write_bitstream_header(q->out, &q->p, desc, ops, op_cnt);
-
 	q->bitstream_loc = q->p;
-	q->px.v = 0;
-	q->px.rgba.a = 255;
-	q->width = desc->width;
-	q->height = desc->height;
-	q->channels = desc->channels;
-	q->stride = desc->width * desc->channels;
-	q->upcache[0]=0;
-	q->upcache[1]=0;
-	q->upcache[2]=0;
-	for(i=0;i<(desc->width<8192?desc->width-1:8191);++i) {/* Prefill upcache to remove branch */
-		q->upcache[((i+1)*3)+0]=q->in[(i*desc->channels)+0];
-		q->upcache[((i+1)*3)+1]=q->in[(i*desc->channels)+1];
-		q->upcache[((i+1)*3)+2]=q->in[(i*desc->channels)+2];
-	}
 
 	/* Check for fastpath implementation */
 	/*for(i=0;i<qoip_fastpath_cnt;++i) {

@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
 	opt_t opt;
 	qoip_desc desc;
 	unsigned char *raw, *tmp, *scratch;
-	size_t tmp_len, cnt, max_size, raw_size;
+	size_t tmp_len, max_size, raw_size;
 	char effort_str[2];
 
 	/* Process args */
@@ -101,14 +101,8 @@ int main(int argc, char *argv[]) {
 
 	qoip_decode(opt.in, opt.in_len, &desc, desc.channels, raw, scratch);
 
-	if(opt.smart) {
-		if(qoipcrunch_encode_smart(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads, opt.entropy))
-			return 1;
-	}
-	else {
-		if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, &cnt, scratch, opt.threads, opt.entropy))
-			return 1;
-	}
+	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, scratch, opt.threads, opt.entropy))
+		return 1;
 
 	if(opt.out) {
 		if(tmp_len<opt.in_len) {
@@ -120,7 +114,7 @@ int main(int argc, char *argv[]) {
 		fclose(opt.out);
 	}
 
-	printf("Tried %zu combinations, result size is %.2f%% of input%s\n", cnt, (tmp_len*100.0)/opt.in_len, (tmp_len<opt.in_len)?"":" (so not used)");
+	printf("Output size is %.2f%% of input%s\n", (tmp_len*100.0)/opt.in_len, (tmp_len<opt.in_len)?"":" (so not used)");
 
 	free(raw);
 	free(tmp);

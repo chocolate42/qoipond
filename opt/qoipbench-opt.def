@@ -18,12 +18,6 @@
 		"max": 6,
 	},
 	{
-		"tag": "smart",
-		"type": "flag",
-		"description": "Use smart crunch path (overrides custom arg)",
-		"int": false
-	},
-	{
 		"tag": "threads",
 		"type": "int",
 		"description": "Number of threads to use. Default 1",
