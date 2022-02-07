@@ -81,7 +81,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	if(level==-1)     /*Custom string*/
 		return qoipcrunch_encode_custom(data, desc, out, out_len, effort, tmp, threads, entropy);
 	else if(level==0) /*Escape hatch to use best (known, on average) combination*/
-		return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[0], entropy, tmp);
+		return qoip_encode(data, desc, out, out_len, "a04002e224c482c5a6", entropy, tmp);
 	else if(level<4)  /*Stat integers are the best way to search the combination list, level 0..2*/
 		return qoipcrunch_encode_smart(data, desc, out, out_len, level-1, tmp, threads, entropy);
 	else              /*Search orders of magnitude more combinations with log tables, level 0..2*/
