@@ -24,7 +24,6 @@ SOFTWARE.
 #define QOIPCRUNCH_H
 #include "qoip.h"
 #include "qoipcrunch-list.h"
-#include <assert.h>
 #include <inttypes.h>
 #include <stddef.h>
 
@@ -36,7 +35,6 @@ extern "C" {
 int qoipcrunch_encode        (const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, void *scratch, int threads, int entropy);
 /*Crunch functions*/
 int qoipcrunch_encode_custom (const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, void *tmp, int threads, int entropy);
-int qoipcrunch_encode_smart  (const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level,    void *tmp, int threads, int entropy);
 int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level,    void *tmp, int threads, int entropy);
 
 #ifdef __cplusplus
@@ -82,10 +80,8 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 		return qoipcrunch_encode_custom(data, desc, out, out_len, effort, tmp, threads, entropy);
 	else if(level==0) /*Escape hatch to use best (known, on average) combination*/
 		return qoip_encode(data, desc, out, out_len, "a04002e224c482c5a6", entropy, tmp);
-	else if(level<4)  /*Stat integers are the best way to search the combination list, level 0..2*/
-		return qoipcrunch_encode_smart(data, desc, out, out_len, level-1, tmp, threads, entropy);
-	else              /*Search orders of magnitude more combinations with log tables, level 0..2*/
-		return qoipcrunch_encode_smarter(data, desc, out, out_len, level-4, tmp, threads, entropy);
+	else              /*Search orders of magnitude more combinations with log tables, level 0..5*/
+		return qoipcrunch_encode_smarter(data, desc, out, out_len, level-1, tmp, threads, entropy);
 	return 1;
 }
 
@@ -96,7 +92,6 @@ int qoipcrunch_encode_custom(const void *data, const qoip_desc *desc, void *out,
 		return qoip_encode(data, desc, out, out_len, combination_list, entropy, tmp);
 	next_opstring = combination_list-1;
 	*out_len=-1;
-	assert(tmp);
 	do {
 		++next_opstring;
 		if(qoip_encode(data, desc, tmp, &working_cnt, next_opstring, 0, NULL))
@@ -111,29 +106,14 @@ int qoipcrunch_encode_custom(const void *data, const qoip_desc *desc, void *out,
 	return 0;
 }
 
-/* Code for smart function follows */
-
-/* Order matters as it determines where in stat integer
-an ops flag resides, and ops are ordered in ascending length so that
-bultin_ctzll can do some magic to eliminate branching. oplen_table is a lookup table
-of op lengths that could possibly be eliminated in favour of some equation
-that generates the length, maybe with the help of a sparse stat integer*/
-static u8 op_table[] = {OP_LUMA1_232, OP_LUMA1_232B, OP_DELTAA, OP_DIFF1_222, OP_DELTA, OP_INDEX3, OP_INDEX4, OP_INDEX5, OP_INDEX6, OP_INDEX7, OP_INDEX8, OP_A, OP_LUMA2_3433, OP_LUMA2_454, OP_LUMA2_464, OP_LUMA3_4645, OP_LUMA3_5654, OP_LUMA3_676, OP_LUMA3_686, OP_LUMA3_787, OP_LUMA4_7876, /*OP_RGB, OP_RGBA*/};
-const static u8 oplen_table[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 5};
-
-typedef struct {
-	u64 opmask;
-	u8 op[16];
-	int op_cnt, best_index, run1, run2;
-	size_t best_cnt;
-} thread_sim_t;
-
-/* Convert a known-good opstring to a byte array */
-static void opstring_to_bytes(char *opstring, u8 *bytes, int *bytes_cnt) {
-	*bytes_cnt=0;
-	for(*bytes_cnt=0; opstring[2*(*bytes_cnt)]; ++*bytes_cnt)
-		bytes[*bytes_cnt] = (qoip_valid_hex(opstring[2*(*bytes_cnt)])<<4) + qoip_valid_hex(opstring[(2*(*bytes_cnt))+1]);
-}
+/* Smarter function that doesn't use an ordered list of good combinations:
+	* For every index1/index2/delta1/delta2 combination
+		* Calculate a base size with these ops
+		* Create a LUMA log table storing counts of channel logs for remaining pixels
+	* A combination pass then iterates over the log table to determine the size the
+		remaining encoding takes. Sum with base size and run stats to get
+		combination encoding size
+*/
 
 /* Calculate how many encoded bytes a run consumes with given run1/run2 sizes */
 static inline size_t qoip_sim_run(int run1_len, int run2_len, size_t run) {
@@ -145,15 +125,6 @@ static inline size_t qoip_sim_run(int run1_len, int run2_len, size_t run) {
 	else if(run)
 		++ret;
 	return ret;
-}
-
-static inline int find_index(u8 *table, u8 key) {
-	int ret=0;
-	for(;;++ret) {
-		if(table[ret]==key)
-			return ret;
-	}
-	return -1;
 }
 
 static size_t run_tot(int run1, int run2, size_t *run_short, size_t *run_long, size_t run_long_cnt) {
@@ -173,7 +144,6 @@ static inline void smart_encode_run(qoip_working_t *q, size_t *run_short, size_t
 			if(*run_long_cnt==*run_cap) {
 				*run_cap += 1024;
 				*run_long = realloc(*run_long, sizeof(size_t)*(*run_cap));
-				assert(*run_long);
 			}
 			*run_long[*run_long_cnt++] = q->run;
 		}
@@ -181,227 +151,11 @@ static inline void smart_encode_run(qoip_working_t *q, size_t *run_short, size_t
 	}
 }
 
-int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level, void *scratch, int threads, int entropy) {
-	int best_index=0, i, indexes_mask[6] = {7, 15, 31, 63, 127, 255}, comb_cnt = 4<<(level<<1), thread_cnt;
-	qoip_working_t qq = {0};
-	qoip_working_t *q = &qq;
-	size_t best_cnt=-1, *run_long=NULL, run_cap=0, run_long_cnt=0, run_short[256] = {0}, stat_cnt=0;
-	u64 *stat=NULL;
-	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0};
-	qoip_rgba_t *indexes[6] = {index3, index4, index5, index6, index7, index8};
-	thread_sim_t tmem[QOIP_MAX_THREADS]={0};
-
-	if ( data == NULL || desc == NULL || out == NULL || out_len == NULL ||
-		desc->width == 0 || desc->height == 0 ||
-		desc->channels < 3 || desc->channels > 4 || desc->colorspace > 1 )
-		return qoip_ret(1, stderr, "qoip_smart: Bad arguments");
-
-	qoip_init_working_memory(q, data, desc);
-
-	/* Stat pass */
-	stat = calloc(desc->width*desc->height, sizeof(u64));
-	assert(stat);
-	q->px_pos = 0;
-	for(q->px_h=0;q->px_h<q->height;++q->px_h) {
-		for(q->px_w=0;q->px_w<q->width;++q->px_w) {
-			q->px_prev.v = q->px.v;
-			if(q->channels==4)
-				q->px = *(qoip_rgba_t *)(q->in + q->px_pos);
-			else {
-				q->px.rgba.r = q->in[q->px_pos + 0];
-				q->px.rgba.g = q->in[q->px_pos + 1];
-				q->px.rgba.b = q->in[q->px_pos + 2];
-			}
-			if (q->px.v == q->px_prev.v)
-				++q->run;/* Accumulate as much RLE as there is */
-			else {
-				smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);
-				/* generate variables that may be needed by ops */
-				if (q->px_w<8192) {
-					q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0]+1) >> 1;
-					q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1]+1) >> 1;
-					q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2]+1) >> 1;
-				}
-				else
-					q->px_ref.v = q->px_prev.v;
-				q->hash = QOIP_COLOR_HASH(q->px);
-				q->vr = q->px.rgba.r - q->px_prev.rgba.r;
-				q->vg = q->px.rgba.g - q->px_prev.rgba.g;
-				q->vb = q->px.rgba.b - q->px_prev.rgba.b;
-				q->va = q->px.rgba.a - q->px_prev.rgba.a;
-				q->avg_r = q->px.rgba.r - q->px_ref.rgba.r;
-				q->avg_g = q->px.rgba.g - q->px_ref.rgba.g;
-				q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
-				q->avg_gr = q->avg_r - q->avg_g;
-				q->avg_gb = q->avg_b - q->avg_g;
-				q->mag_gr = q->avg_gr>=0?q->avg_gr:-(q->avg_gr+1);
-				q->mag_g = q->avg_g>=0?q->avg_g:-(q->avg_g+1);
-				q->mag_gb = q->avg_gb>=0?q->avg_gb:-(q->avg_gb+1);
-				q->mag_rb = q->mag_gr>q->mag_gb?q->mag_gr:q->mag_gb;
-				/* Gather stats */
-				stat[stat_cnt] = 0;
-				/*  LUMA */
-				if(q->va) {
-					if( q->va > -5 && q->va < 4 &&
-						q->mag_rb < 4 &&
-						q->mag_g  < 8 )
-						stat[stat_cnt] |= ((1<<12)|(3<<15)|(1<<20));//3433 4645 5654 7876
-					else if( q->va   > -17 && q->va   < 16 &&
-						q->mag_rb <  8 &&
-						q->mag_g  < 32 )
-						stat[stat_cnt] |= ((3<<15)|(1<<20));//4645 5654 7876
-					else if( q->va   >  -9 && q->va    < 8 &&
-						q->mag_rb < 16 &&
-						q->mag_g  < 32 )
-						stat[stat_cnt] |= ((1<<16)|(1<<20));//5654 7876
-					else if( q->va   > -33 && q->va   < 32 &&
-						q->mag_rb < 64 )
-						stat[stat_cnt] |= (1<<20);//7876
-				}
-				else {
-					if( q->mag_rb < 2 && q->mag_g  < 4 )
-						stat[stat_cnt] |= (1|(511<<12));//all
-					else if( q->mag_rb < 4 && q->mag_g  < 8 )
-						stat[stat_cnt] |= (511<<12);//3433+
-					else if( q->mag_rb <  8 && q->mag_g  < 16 )
-						stat[stat_cnt] |= (255<<13);//454+
-					else if( q->mag_rb <  8 && q->mag_g  < 32 )
-						stat[stat_cnt] |= (127<<14);//464+
-					else if( q->mag_rb < 16 && q->mag_g  < 32 )
-						stat[stat_cnt] |= (31<<16);//5654+
-					else if( q->mag_rb < 32 && q->mag_g  < 64 )
-						stat[stat_cnt] |= (15<<17);//676+
-					else if( q->mag_rb < 32 )
-						stat[stat_cnt] |= (7<<18);//686 787 7876
-					else if( q->mag_rb < 64 )
-						stat[stat_cnt] |= (3<<19);//787 7876
-				}
-				/* Unique ops */
-				if(q->va==0) {
-					if( q->avg_g > -5 && q->avg_g < 0 &&
-						q->avg_gr > -2 && q->avg_gr < 3 &&//cannot use mag
-						q->avg_gb > -2 && q->avg_gb < 3 )
-						stat[stat_cnt] |= (1 << 1);//232b
-					else if( q->avg_g > -1 && q->avg_g < 4 &&
-						q->mag_rb < 2 )
-						stat[stat_cnt] |= (1 << 1);//232b
-					if( q->avg_r > -3 && q->avg_r < 2 &&
-						q->mag_g < 2 &&
-						q->avg_b > -3 && q->avg_b < 2 )
-						stat[stat_cnt] |= (1 << 3);//diff 222
-					if( q->avg_r > -2 && q->avg_r < 2 &&
-						q->avg_g > -2 && q->avg_g < 2 &&
-						q->avg_b > -2 && q->avg_b < 2 )
-						stat[stat_cnt] |= (1 << 4);//delta
-					stat[stat_cnt] |= (1 << 21);//OP_RGB
-				}
-				if( q->vr == 0 && q->vg == 0 && q->vb == 0 &&
-					q->va > -3 && q->va < 3 )
-					stat[stat_cnt] |= (1 << 4);//delta
-				if( (q->va == -1 || q->va == 1) &&
-					q->avg_r > -2 && q->avg_r < 2 &&
-					q->avg_g > -2 && q->avg_g < 2 &&
-					q->avg_b > -2 && q->avg_b < 2 )
-					stat[stat_cnt] |= (1 << 2);//deltaa
-				else if( q->vr == 0 && q->vg == 0 && q->vb == 0 &&
-					q->va > -6 && q->va < 5 )
-					stat[stat_cnt] |= (1 << 2);//deltaa
-				if( q->vr == 0 && q->vg == 0 && q->vb == 0 )
-					stat[stat_cnt] |= (1 << 11);//a
-				for(i=5;i<11;++i) {/*hash index*/
-					if(indexes[i-5][q->hash & indexes_mask[i-5]].v == q->px.v)
-						stat[stat_cnt] |= (1 << i);
-					indexes[i-5][q->hash & indexes_mask[i-5]] = q->px;
-				}
-				stat[stat_cnt] |= (1 << 22);//OP_RGBA always present so ctzll has a fallback
-				++stat_cnt;
-			}
-			if(q->px_w<8192) {
-				q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-				q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-				q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-			}
-			q->px_pos += desc->channels;
-		}
-	}
-	smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);
-
-	/* Processing pass */
-	thread_cnt = threads==0 ? omp_get_num_procs() : threads;
-	thread_cnt = thread_cnt>QOIP_MAX_THREADS ? QOIP_MAX_THREADS : thread_cnt;
-	thread_cnt = comb_cnt<thread_cnt ? comb_cnt : thread_cnt;
-	omp_set_num_threads(thread_cnt);
-
-	#pragma omp parallel
-	{/*init working memory*/
-		tmem[omp_get_thread_num()].best_cnt=-1;
-		tmem[omp_get_thread_num()].best_index=-1;
-	}
-	#pragma omp parallel for
-	for(i=0;i<comb_cnt;++i) {
-		size_t k, m, curr=0;
-		opstring_to_bytes(qoipcrunch_unified[i], tmem[omp_get_thread_num()].op, &(tmem[omp_get_thread_num()].op_cnt));
-		curr+=16;//qoip header
-		curr+=16;//bitstream min
-		if(tmem[omp_get_thread_num()].op_cnt>6)
-			curr+= 8*(((tmem[omp_get_thread_num()].op_cnt-6)/8)+1);
-		/* run handling */
-		tmem[omp_get_thread_num()].run1=253;/*get run sizes*/
-		for(k=0;k<tmem[omp_get_thread_num()].op_cnt;++k)
-			tmem[omp_get_thread_num()].run1 -= QOIP_OPCNT(tmem[omp_get_thread_num()].op[k]);
-		assert(tmem[omp_get_thread_num()].run1>=0);
-		tmem[omp_get_thread_num()].run2=tmem[omp_get_thread_num()].run1 + 256;
-		run_tot(tmem[omp_get_thread_num()].run1, tmem[omp_get_thread_num()].run2, run_short, run_long, run_long_cnt);
-		/*build op mask*/
-		tmem[omp_get_thread_num()].opmask = 3<<21;
-		for(m=0;m<tmem[omp_get_thread_num()].op_cnt;++m) {
-			tmem[omp_get_thread_num()].opmask |= 1<<find_index(op_table, tmem[omp_get_thread_num()].op[m]);
-		}
-		/* Use op mask */
-		for(k=0;k<stat_cnt;++k)
-			curr += oplen_table[__builtin_ctzll(tmem[omp_get_thread_num()].opmask & stat[k])];
-		curr += 8;
-		if(curr%8)
-			curr = ((curr/8)+1)*8;
-		if(curr<tmem[omp_get_thread_num()].best_cnt) {
-			tmem[omp_get_thread_num()].best_cnt = curr;
-			tmem[omp_get_thread_num()].best_index = i;
-		}
-	}
-	/*aggregate OpenMP*/
-	for(i=0;i<thread_cnt;++i) {
-		if(best_cnt > tmem[i].best_cnt) {
-			best_cnt = tmem[i].best_cnt;
-			best_index = tmem[i].best_index;
-		}
-	}
-	if(stat)
-		free(stat);
-	if(run_long)
-		free(run_long);
-
-	return qoip_encode(data, desc, out, out_len, qoipcrunch_unified[best_index], entropy, scratch);
-}
-
-/* Smarter function that does away with an ordered list of good combinations.
-Instead it tries to analyse the stat pass to eliminate ops that poorly fit the data,
-then tries many combinations of the remaining ops */
-
-/* Completely redo how combination passes are done
-	* For every index1/index2/delta1 combination
-		* Get their sizes
-		* Create a LUMA log table which counts the log size of mag_rb/mag_g/mag_a
-		of each pixel
-	* A combination pass then chooses an index1/index2/delta combo and iterates
-	the LUMA_RGB2/3 and LUMARGBA2/3/4 ops chosen
-	* Calculating size from there is a matter of summing over the small luma_log table
-*/
-
 /*Used whenever nop is selected from a set. Always returns false as a nop cannot encode anything*/
-int qoip_false(qoip_working_t *q) {
+static inline int qoip_false(qoip_working_t *q) {
 	return 0;
 }
-int qoip_sim_deltaa(qoip_working_t *q) {
+static inline int qoip_sim_deltaa(qoip_working_t *q) {
 	if (
 		(q->va == -1 || q->va == 1) &&
 		q->avg_r > -2 && q->avg_r < 2 &&
@@ -418,7 +172,7 @@ int qoip_sim_deltaa(qoip_working_t *q) {
 	}
 	return 0;
 }
-int qoip_sim_delta(qoip_working_t *q) {
+static inline int qoip_sim_delta(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_r > -2 && q->avg_r < 2 &&
@@ -435,7 +189,7 @@ int qoip_sim_delta(qoip_working_t *q) {
 	}
 	return 0;
 }
-int qoip_sim_diff1_222(qoip_working_t *q) {
+static inline int qoip_sim_diff1_222(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_r > -3 && q->avg_r < 2 &&
@@ -446,7 +200,7 @@ int qoip_sim_diff1_222(qoip_working_t *q) {
 	}
 	return 0;
 }
-int qoip_sim_luma1_232b(qoip_working_t *q) {
+static inline int qoip_sim_luma1_232b(qoip_working_t *q) {
 	if (
 		q->va == 0 &&
 		q->avg_g   > -5 && q->avg_g   < 0 &&
@@ -486,15 +240,15 @@ static inline int qoip_sim_luma1_232(qoip_working_t *q) {
 
 typedef struct {
 	size_t base_size;//Size of index1/index2/delta1 encodings combined
-	size_t lumalog[7*6*9];
+	size_t lumalog[6*6*8];
 } logstat;
 
-/* full log2 of range -128..127: log_lookup[num+128]*/
-int log_lookup_0_8[256]={
+/* Full log of range -128..127, except that logs of 1 are clamped to 2 */
+int log_lookup_0_2_8[256]={
 	8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
 	8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
 	7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
-	6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,5,5,5,5,5,5,5,5,4,4,4,4,3,3,2,1,
+	6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,5,5,5,5,5,5,5,5,4,4,4,4,3,3,2,2,
 	0,2,3,3,4,4,4,4,5,5,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,
 	7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
 	8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
@@ -550,8 +304,8 @@ enum {STATOP_INDEX1_CNT=5, STATOP_RGB1_CNT=5, STATOP_RGBA1_CNT=2, STATOP_INDEX2_
 #define STATOP_CNT_MAX (STATOP_INDEX1_CNT*STATOP_RGB1_CNT*STATOP_RGBA1_CNT*STATOP_INDEX2_CNT)
 #define LOGSTAT_INDEX_RGBA(a, b, c, d) (((a)*STATOP_INDEX1_CNT*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((b)*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((c)*STATOP_INDEX2_CNT)+(d))
 #define LOGSTAT_INDEX_RGB(b, c, d)                                                               (((b)*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((c)*STATOP_INDEX2_CNT)+(d))
-#define LUMALOG_INDEX_RGBA(a, b, c) (((a)*42)+(((b)-3)*7)+((c)-2))
-#define LUMALOG_INDEX_RGB(b, c)              ((((b)-3)*7)+((c)-2))
+#define LUMALOG_INDEX_RGBA(a, b, c) (((a)*36)+(((b)-3)*6)+((c)-2))
+#define LUMALOG_INDEX_RGB(b, c)              ((((b)-3)*6)+((c)-2))
 
 /*Functions to deduplicate code*/
 static inline void smarter_gen_common(qoip_working_t *q, int *log_g, int *log_rb) {
@@ -579,7 +333,7 @@ static inline void smarter_gen_common(qoip_working_t *q, int *log_g, int *log_rb
 }
 
 int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level, void *scratch, int threads, int entropy) {
-	int isrgb=0, use_a=0;
+	int isrgb=-1, use_a=0;
 	size_t *run_long=NULL, run_cap=0, run_long_cnt=0, run_short[256] = {0}, run_lookup[256];
 
 	size_t i, j, comb, comb_cnt, explicit_cnt, best_cnt=-1, curr_cnt;
@@ -587,17 +341,17 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	qoip_working_t *q = &qq;
 	/*index1/2 constants*/
 	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0}, index9[512]={0}, index10[1024]={0};
-	qoip_rgba_t *indexes1[5] = {index6, index7, index5, index4, index3}, *indexes2[3] = {index8, index9, index10};
-	const u8 statop_index2[] = {OP_INDEX8, OP_INDEX9, OP_INDEX10};
-	const u8 statop_index1[] = {OP_INDEX6, OP_INDEX7, OP_INDEX5, OP_INDEX4, OP_INDEX3};
-	const int index1_mask[5] = {63, 127, 31, 15, 7}, index2_mask[3] = {255, 511, 1023};
+	qoip_rgba_t *indexes1[5] = {index6, index5, index7, index4, index3}, *indexes2[3] = {index10, index9, index8};
+	const u8 statop_index2[] = {OP_INDEX10, OP_INDEX9, OP_INDEX8};
+	const u8 statop_index1[] = {OP_INDEX6, OP_INDEX5, OP_INDEX7, OP_INDEX4, OP_INDEX3};
+	const int index1_mask[5] = {63, 31, 127, 15, 7}, index2_mask[3] = {1023, 511, 255};
 	/*rgb1 constants*/
 	const u8 statop_rgb1[] = {OP_LUMA1_232B, OP_DIFF1_222, OP_DELTA, OP_LUMA1_232, OP_LUMA1_222};
 	int (*sim_delta1[]) (qoip_working_t *) = {qoip_sim_luma1_232b, qoip_sim_diff1_222, qoip_sim_delta, qoip_sim_luma1_232, qoip_sim_luma1_222};
 	int res_delta1[5];
 
-	const u8 statop_rgb2[] = {OP_LUMA2_464,   OP_LUMA2_454,  OP_LUMA2_555,  OP_LUMA2_444,  OP_LUMA2_353,  OP_LUMA2_343,  OP_LUMA2_333, OP_LUMA2_242};
-	const u8 statop_rgb3[] = {OP_LUMA3_787, OP_LUMA3_686, OP_LUMA3_676,  OP_LUMA3_575,  OP_LUMA3_565,  OP_LUMA3_666,  OP_LUMA3_777};
+	const u8 statop_rgb2[] = {OP_LUMA2_464, OP_LUMA2_454, OP_LUMA2_555, OP_LUMA2_444,  OP_LUMA2_353,  OP_LUMA2_343,  OP_LUMA2_333, OP_LUMA2_242};
+	const u8 statop_rgb3[] = {OP_LUMA3_686, OP_LUMA3_676, OP_LUMA3_787, OP_LUMA3_575,  OP_LUMA3_565,  OP_LUMA3_666,  OP_LUMA3_777};
 
 	const u8 statop_rgba1[] = {255, OP_DELTAA};
 	int (*sim_delta2[]) (qoip_working_t *) = {qoip_false, qoip_sim_deltaa};
@@ -605,16 +359,22 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 
 	const u8 statop_rgba2[] = {255, OP_LUMA2_3433, OP_LUMA2_3533, OP_LUMA2_3534, OP_LUMA2_2322, OP_LUMA2_2422, OP_LUMA2_2423, OP_LUMA2_3432};
 	const u8 statop_rgba3[] = {255, OP_LUMA3_4543, OP_LUMA3_4544, OP_LUMA3_4644, OP_LUMA3_4645, OP_LUMA3_5654, OP_LUMA3_5655, OP_LUMA3_5755, OP_LUMA3_5756};
-	const u8 statop_rgba4[] = {255, OP_LUMA4_7876, OP_LUMA4_6766, OP_LUMA4_6866, OP_LUMA4_6765, OP_LUMA4_6867, OP_LUMA4_7877};
+	const u8 statop_rgba4[] = {255, OP_LUMA4_6866, OP_LUMA4_7876, OP_LUMA4_6766, OP_LUMA4_6765, OP_LUMA4_6867, OP_LUMA4_7877};
 	int rgb_cnts[] = {
-		4, 4,    3, 4,    3,/*level 0*/
-		5, 4,    3, 6,    5,/*level 1*/
-		5, 5,    3, 8,    7,/*level 2*/
+		2, 2,    1, 2,    2,/*level 0*/
+		3, 4,    1, 4,    2,/*level 1*/
+		5, 5,    2, 5,    4,/*level 2*/
+		5, 5,    2, 6,    5,/*level 3*/
+		5, 5,    3, 7,    6,/*level 4*/
+		5, 5,    3, 8,    7,/*level 5*/
 	};
 	int rgba_cnts[] = {
-		4, 4, 2, 3, 4, 4, 3, 4, 4,/*level 0*/
-		5, 4, 2, 3, 6, 5, 5, 6, 6,/*level 1*/
-		5, 5, 2, 3, 8, 8, 7, 9, 7,/*level 2*/
+		2, 2, 2, 1, 2, 1, 2, 2, 2,/*level 0*/
+		3, 4, 2, 1, 4, 4, 2, 4, 4,/*level 1*/
+		5, 4, 2, 2, 5, 5, 4, 6, 5,/*level 2*/
+		5, 4, 2, 2, 6, 6, 5, 7, 6,/*level 3*/
+		5, 5, 2, 3, 7, 7, 6, 8, 7,/*level 4*/
+		5, 5, 2, 3, 8, 8, 7, 9, 7,/*level 5*/
 	};
 
 	/*statop sets in the order they should be tested*/
@@ -679,8 +439,12 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 										if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v)
 											log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=2;
-										else///*Not handled by index2 op, add to luma_log
-											log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+										else {///*Not handled by index2 op
+											if(log_rb==8)/*rb too big for any luma op*/
+												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=4;
+											else
+												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+										}
 									}
 								}
 							}
@@ -710,7 +474,9 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 					smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);
 					smarter_gen_common(q, &log_g, &log_rb);
 					q->va = q->px.rgba.a - q->px_prev.rgba.a;
-					log_a  = log_lookup_0_8[q->va     + 128];
+					log_a  = log_lookup_0_2_8[q->va     + 128];
+					if(log_a)
+						isrgb=0;
 					lumalog_loc = LUMALOG_INDEX_RGBA(log_a, log_g, log_rb);
 					for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1)
 						res_delta1[it_delta1] = sim_delta1[it_delta1](q);
@@ -751,6 +517,10 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 														use_a=1;
 														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
 													}
+													else if(log_a==8)
+														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=5;
+													else if(log_rb==8)
+														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+= (log_a?5:4);
 													else
 														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
 												}
@@ -777,26 +547,10 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);// Cap last run
 
 	/*Determine if 4 channel input is RGB or RGBA*/
-	if(!isrgb) {
-		size_t sc, gg, rr, aa;
-		isrgb=1;
-		for(sc=0;sc<STATOP_CNT_MAX;++sc) {
-			for(gg=3;gg<9;++gg){
-				for(rr=2;rr<9;++rr){
-					for(aa=1;aa<9;++aa){
-						if(log_configs[sc].lumalog[LUMALOG_INDEX_RGBA(aa, gg, rr)]) {
-							isrgb=0;
-							goto stageleft;
-						}
-					}
-				}
-			}
-		}
-	}
-	stageleft:
+	isrgb = isrgb == -1 ? 1 : isrgb;
 
 	/* Process run data into lookup table to avoid redoing work */
-	for(i=0;i<256;++i)
+	for(i=0;i<64;++i)
 		run_lookup[i] = run_tot(i, i+256, run_short, run_long, run_long_cnt);
 
 	/* Processing pass */
@@ -821,25 +575,22 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 			explicit_cnt = 0;
 			for(j=0;j<sets_cnt;++j)
 				explicit_cnt += QOIP_OPCNT(choice[j]);
-			if(explicit_cnt>253)
+			if(explicit_cnt<192 || explicit_cnt>253)
 				continue;
 
 			/*Test combination*/
 			log = log_configs + LOGSTAT_INDEX_RGB(cindex[0], cindex[1], cindex[2]);
 			curr_cnt = run_lookup[256-(explicit_cnt+3)] + log->base_size;
 			int g, r, oplog[12];
-			for(j=3;j<sets_cnt;++j)
-				oplog[j] = op_log_lookup[choice[j]];
+			oplog[3] = op_log_lookup[choice[3]];
+			oplog[4] = op_log_lookup[choice[4]];
 			for(g=3;g<=8;++g) {
-				for(r=2;r<=8;++r) {
-					for(j=3;j<sets_cnt;++j) {
-						assert(oplog!=0);
-						if( r<=(oplog[j]&15) && g<=((oplog[j]>>4)&15) ) {
-							curr_cnt += (set_lengths[j]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
-							break;
-						}
-					}
-					if(j==sets_cnt)
+				for(r=2;r<=7;++r) {
+					if( r<=(oplog[3]&15) && g<=((oplog[3]>>4)&15) )
+						curr_cnt += (set_lengths[3]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
+					else if( r<=(oplog[4]&15) && g<=((oplog[4]>>4)&15) )
+						curr_cnt += (set_lengths[4]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
+					else
 						curr_cnt += (4*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
 				}
 			}
@@ -883,21 +634,35 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 			int a, g, r, oplog[12];
 			for(j=4;j<sets_cnt;++j)
 				oplog[j] = op_log_lookup[choice[j]];
-			for(a=0;a<=8;++a) {
+			{//a=0
 				for(g=3;g<=8;++g) {
-					for(r=2;r<=8;++r) {
+					for(r=2;r<=7;++r) {
 						for(j=4;j<sets_cnt;++j) {
-							assert(oplog!=0);
-							if( r<=(oplog[j]&15) && g<=((oplog[j]>>4)&15) && a<=((oplog[j]>>8)&15) ) {
-								curr_cnt += (set_lengths[j]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+							if( r<=(oplog[j]&15) && g<=((oplog[j]>>4)&15) ) {
+								curr_cnt += (set_lengths[j]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
 								break;
 							}
 						}
 						if(j==sets_cnt)
-							curr_cnt += ((a==0?4:5)*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+							curr_cnt += (4*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
 					}
 				}
 			}
+			for(a=2;a<=7;++a) {
+				for(g=3;g<=8;++g) {
+					for(r=2;r<=7;++r) {
+						if(      r<=(oplog[5]&15) && g<=((oplog[5]>>4)&15) && a<=((oplog[5]>>8)&15) )
+							curr_cnt += (set_lengths[5]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+						else if( r<=(oplog[7]&15) && g<=((oplog[7]>>4)&15) && a<=((oplog[7]>>8)&15) )
+							curr_cnt += (set_lengths[7]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+						else if( r<=(oplog[8]&15) && g<=((oplog[8]>>4)&15) && a<=((oplog[8]>>8)&15) )
+							curr_cnt += (set_lengths[8]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+						else
+							curr_cnt += (5*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+					}
+				}
+			}
+
 			if(best_cnt>curr_cnt) {
 				best_cnt=curr_cnt;
 				for(j=0;j<sets_cnt;++j)
