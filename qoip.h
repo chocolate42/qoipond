@@ -104,9 +104,9 @@ enum{
 	OP_LUMA2_444, OP_LUMA2_3432,
 	/*MASK5*/OP_INDEX3=0x80, OP_INDEX3F, OP_LUMA3_676, OP_LUMA3_4645,
 	OP_LUMA2_353, OP_LUMA2_2423, OP_LUMA4_6867,
-	/*MASK6*/OP_PLACE2=0xa0, OP_PLACE2F,
+	/*MASK6*/OP_INDEX10=0xa0, OP_PLACE2F,
 	OP_LUMA2_343, OP_LUMA3_666, OP_LUMA2_2422, OP_LUMA3_4644, OP_LUMA4_6866,
-	/*MASK7*/OP_PLACE1=0xc0, OP_PLACE1F,
+	/*MASK7*/OP_INDEX9=0xc0, OP_PLACE1F,
 	OP_LUMA2_333, OP_LUMA3_575, OP_LUMA2_2322, OP_LUMA3_4544, OP_LUMA4_6766,
 	/*MASK8*/OP_INDEX8=0xe0, OP_INDEX8F, OP_A,
 	OP_LUMA2_242, OP_LUMA3_565, OP_LUMA2_2321, OP_LUMA3_4543, OP_LUMA4_6765,
@@ -130,10 +130,10 @@ typedef union {
 /* Working state of an encode/decode run, exposed for smart crunch function */
 typedef struct {
 	size_t bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
-	int channels, hash, run, run1_len, run2_len, index1_maxval;
+	int channels, hash, run, run1_len, run2_len, index1_maxval, index2_maxval;
 	unsigned char *out, upcache[8192*3];
 	const unsigned char *in;
-	qoip_rgba_t index[128], index2[256], px, px_prev, px_ref;
+	qoip_rgba_t index[128], index2[1024], px, px_prev, px_ref;
 	i8 vr, vg, vb, va;/*Difference from previous */
 	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/* Difference from average */
 	u8 mag_a, mag_gr, mag_g, mag_gb, mag_rb;/* Magnitudes of avg* to reduce comparisons */
@@ -222,14 +222,16 @@ typedef struct {
 #include "qoip-func.c"
 
 /* new_op definitions go here, if qoip_op_lookup remains linear order doesn't matter */
-int qoip_ops_cnt = 50;
+int qoip_ops_cnt = 52;
 const opdef_t qoip_ops[] = {
-	{OP_INDEX8,   QOIP_SET_INDEX2, "OP_INDEX8:     2 byte, 256 value index cache                                               ", qoip_enc_index8, qoip_dec_index8},
-	{OP_INDEX7,   QOIP_SET_INDEX1, "OP_INDEX7:     1 byte, 128 value index cache                                               ", qoip_enc_index, qoip_dec_index},
-	{OP_INDEX6,   QOIP_SET_INDEX1, "OP_INDEX6:     1 byte,  64 value index cache                                               ", qoip_enc_index, qoip_dec_index},
-	{OP_INDEX5,   QOIP_SET_INDEX1, "OP_INDEX5:     1 byte,  32 value index cache                                               ", qoip_enc_index, qoip_dec_index},
-	{OP_INDEX4,   QOIP_SET_INDEX1, "OP_INDEX4:     1 byte,  16 value index cache                                               ", qoip_enc_index, qoip_dec_index},
-	{OP_INDEX3,   QOIP_SET_INDEX1, "OP_INDEX3:     1 byte,   8 value index cache                                               ", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX10,  QOIP_SET_INDEX2, "OP_INDEX10:    2 byte, 1024 value index cache                                               ", qoip_enc_index10, qoip_dec_index10},
+	{OP_INDEX9,   QOIP_SET_INDEX2, "OP_INDEX9:     2 byte,  512 value index cache                                               ", qoip_enc_index9, qoip_dec_index9},
+	{OP_INDEX8,   QOIP_SET_INDEX2, "OP_INDEX8:     2 byte,  256 value index cache                                               ", qoip_enc_index8, qoip_dec_index8},
+	{OP_INDEX7,   QOIP_SET_INDEX1, "OP_INDEX7:     1 byte,  128 value index cache                                               ", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX6,   QOIP_SET_INDEX1, "OP_INDEX6:     1 byte,   64 value index cache                                               ", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX5,   QOIP_SET_INDEX1, "OP_INDEX5:     1 byte,   32 value index cache                                               ", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX4,   QOIP_SET_INDEX1, "OP_INDEX4:     1 byte,   16 value index cache                                               ", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX3,   QOIP_SET_INDEX1, "OP_INDEX3:     1 byte,    8 value index cache                                               ", qoip_enc_index, qoip_dec_index},
 	{OP_DELTA,      QOIP_SET_LEN1, "OP_DELTA:      1 byte delta, ( avg_r  - 1.. 1, avg_g  - 1.. 1, avg_b  - 1.. 1, a        0 ), AND\n"
                                  "                             ( r            0, g            0, b            0, va - 2.. 2 )", qoip_enc_delta, qoip_dec_delta},
 	{OP_DELTAA,     QOIP_SET_LEN1, "OP_DELTAA:     1 byte delta, ( avg_r  - 1.. 1, avg_g  - 1.. 1, avg_b  - 1.. 1, va -1 OR 1 ), AND\n"
@@ -531,6 +533,8 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 		ops[i].dec   = opdef->dec;
 		if(ops[i].set==QOIP_SET_INDEX1)
 			q->index1_maxval = ops[i].opcnt - 1;
+		if(ops[i].set==QOIP_SET_INDEX2)
+			q->index2_maxval = (ops[i].opcnt << 8) - 1;
 		ops[i].opcode = op;
 		op += ops[i].opcnt;
 	}
@@ -756,7 +760,7 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 		}
 		else
 			q->px_ref.v = q->px_prev.v;
-		q->hash = QOIP_COLOR_HASH(q->px) & 255;
+		q->hash = QOIP_COLOR_HASH(q->px);
 		q->vr = q->px.rgba.r - q->px_prev.rgba.r;
 		q->vg = q->px.rgba.g - q->px_prev.rgba.g;
 		q->vb = q->px.rgba.b - q->px_prev.rgba.b;
@@ -792,7 +796,7 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
 		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
 	}
-	q->index2[q->hash] = q->px;
+	q->index2[q->hash & q->index2_maxval] = q->px;
 }
 
 void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_desc *desc) {
@@ -804,6 +808,7 @@ void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_de
 	q->height = desc->height;
 	q->channels = desc->channels;
 	q->stride = desc->width * desc->channels;
+	q->index2_maxval=1023;
 	q->upcache[0]=0;
 	q->upcache[1]=0;
 	q->upcache[2]=0;
@@ -922,7 +927,7 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 			}
 		}
 		q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px;
-		q->index2[QOIP_COLOR_HASH(q->px) & 255] = q->px;
+		q->index2[QOIP_COLOR_HASH(q->px) & q->index2_maxval] = q->px;
 	}
 	if(q->px_w<8192) {
 		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;

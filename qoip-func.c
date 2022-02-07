@@ -42,7 +42,7 @@ void qoip_dec_index(qoip_working_t *q) {
 }
 
 int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
-	if (q->index2[q->hash].v == q->px.v) {
+	if (q->index2[q->hash & 255].v == q->px.v) {
 		q->out[q->p++] = opcode;
 		q->out[q->p++] = q->hash;
 		return 1;
@@ -52,6 +52,34 @@ int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
 void qoip_dec_index8(qoip_working_t *q) {
 	++q->p;
 	q->px = q->index2[q->in[q->p++]];
+}
+
+int qoip_enc_index9(qoip_working_t *q, u8 opcode) {
+	if (q->index2[q->hash & 511].v == q->px.v) {
+		q->out[q->p++] = opcode | ((q->hash & 511) >> 8);
+		q->out[q->p++] = q->hash & 255;
+		return 1;
+	}
+	return 0;
+}
+void qoip_dec_index9(qoip_working_t *q) {
+	int index = (q->in[q->p++] & 1) << 8;
+	index |= q->in[q->p++];
+	q->px = q->index2[index];
+}
+
+int qoip_enc_index10(qoip_working_t *q, u8 opcode) {
+	if (q->index2[q->hash & 1023].v == q->px.v) {
+		q->out[q->p++] = opcode | ((q->hash & 1023) >> 8);
+		q->out[q->p++] = q->hash & 255;
+		return 1;
+	}
+	return 0;
+}
+void qoip_dec_index10(qoip_working_t *q) {
+	int index = (q->in[q->p++] & 3) << 8;
+	index |= q->in[q->p++];
+	q->px = q->index2[index];
 }
 
 int qoip_enc_delta(qoip_working_t *q, u8 opcode) {

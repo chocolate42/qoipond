@@ -224,7 +224,7 @@ int qoipcrunch_encode_smart(const void *data, const qoip_desc *desc, void *out, 
 				}
 				else
 					q->px_ref.v = q->px_prev.v;
-				q->hash = QOIP_COLOR_HASH(q->px) & 255;
+				q->hash = QOIP_COLOR_HASH(q->px);
 				q->vr = q->px.rgba.r - q->px_prev.rgba.r;
 				q->vg = q->px.rgba.g - q->px_prev.rgba.g;
 				q->vb = q->px.rgba.b - q->px_prev.rgba.b;
@@ -546,7 +546,7 @@ int op_log_lookup[256]={
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 };
 
-enum {STATOP_INDEX1_CNT=5, STATOP_RGB1_CNT=5, STATOP_RGBA1_CNT=2, STATOP_INDEX2_CNT=1};
+enum {STATOP_INDEX1_CNT=5, STATOP_RGB1_CNT=5, STATOP_RGBA1_CNT=2, STATOP_INDEX2_CNT=3};
 #define STATOP_CNT_MAX (STATOP_INDEX1_CNT*STATOP_RGB1_CNT*STATOP_RGBA1_CNT*STATOP_INDEX2_CNT)
 #define LOGSTAT_INDEX_RGBA(a, b, c, d) (((a)*STATOP_INDEX1_CNT*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((b)*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((c)*STATOP_INDEX2_CNT)+(d))
 #define LOGSTAT_INDEX_RGB(b, c, d)                                                               (((b)*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((c)*STATOP_INDEX2_CNT)+(d))
@@ -563,7 +563,7 @@ static inline void smarter_gen_common(qoip_working_t *q, int *log_g, int *log_rb
 	}
 	else
 		q->px_ref.v = q->px_prev.v;
-	q->hash = QOIP_COLOR_HASH(q->px) & 255;
+	q->hash = QOIP_COLOR_HASH(q->px);
 	q->vr = q->px.rgba.r - q->px_prev.rgba.r;
 	q->vg = q->px.rgba.g - q->px_prev.rgba.g;
 	q->vb = q->px.rgba.b - q->px_prev.rgba.b;
@@ -586,16 +586,16 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	/*index1/2 constants*/
-	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0};
-	qoip_rgba_t *indexes1[5] = {index6, index7, index5, index4, index3}, *indexes2[1] = {index8};
+	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0}, index9[512]={0}, index10[1024]={0};
+	qoip_rgba_t *indexes1[5] = {index6, index7, index5, index4, index3}, *indexes2[3] = {index8, index9, index10};
+	const u8 statop_index2[] = {OP_INDEX8, OP_INDEX9, OP_INDEX10};
 	const u8 statop_index1[] = {OP_INDEX6, OP_INDEX7, OP_INDEX5, OP_INDEX4, OP_INDEX3};
-	const int index1_mask[5] = {63, 127, 31, 15, 7}, index2_mask[1] = {255};
+	const int index1_mask[5] = {63, 127, 31, 15, 7}, index2_mask[3] = {255, 511, 1023};
 	/*rgb1 constants*/
 	const u8 statop_rgb1[] = {OP_LUMA1_232B, OP_DIFF1_222, OP_DELTA, OP_LUMA1_232, OP_LUMA1_222};
 	int (*sim_delta1[]) (qoip_working_t *) = {qoip_sim_luma1_232b, qoip_sim_diff1_222, qoip_sim_delta, qoip_sim_luma1_232, qoip_sim_luma1_222};
 	int res_delta1[5];
 
-	const u8 statop_index2[] = {OP_INDEX8};
 	const u8 statop_rgb2[] = {OP_LUMA2_464,   OP_LUMA2_454,  OP_LUMA2_555,  OP_LUMA2_444,  OP_LUMA2_353,  OP_LUMA2_343,  OP_LUMA2_333, OP_LUMA2_242};
 	const u8 statop_rgb3[] = {OP_LUMA3_787, OP_LUMA3_686, OP_LUMA3_676,  OP_LUMA3_575,  OP_LUMA3_565,  OP_LUMA3_666,  OP_LUMA3_777};
 
@@ -607,14 +607,14 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	const u8 statop_rgba3[] = {255, OP_LUMA3_4543, OP_LUMA3_4544, OP_LUMA3_4644, OP_LUMA3_4645, OP_LUMA3_5654, OP_LUMA3_5655, OP_LUMA3_5755, OP_LUMA3_5756};
 	const u8 statop_rgba4[] = {255, OP_LUMA4_7876, OP_LUMA4_6766, OP_LUMA4_6866, OP_LUMA4_6765, OP_LUMA4_6867, OP_LUMA4_7877};
 	int rgb_cnts[] = {
-		4, 4,    1, 4,    3,/*level 0*/
-		5, 4,    1, 6,    5,/*level 1*/
-		5, 5,    1, 8,    7,/*level 2*/
+		4, 4,    3, 4,    3,/*level 0*/
+		5, 4,    3, 6,    5,/*level 1*/
+		5, 5,    3, 8,    7,/*level 2*/
 	};
 	int rgba_cnts[] = {
-		4, 4, 2, 1, 4, 4, 3, 4, 4,/*level 0*/
-		5, 4, 2, 1, 6, 5, 5, 6, 6,/*level 1*/
-		5, 5, 2, 1, 8, 8, 7, 9, 7,/*level 2*/
+		4, 4, 2, 3, 4, 4, 3, 4, 4,/*level 0*/
+		5, 4, 2, 3, 6, 5, 5, 6, 6,/*level 1*/
+		5, 5, 2, 3, 8, 8, 7, 9, 7,/*level 2*/
 	};
 
 	/*statop sets in the order they should be tested*/
@@ -687,7 +687,8 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 						}
 						indexes1[it_index1][q->hash & index1_mask[it_index1]] = q->px;
 					}
-					indexes2[0][q->hash & index2_mask[0]] = q->px;
+					for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2)
+						indexes2[it_index2][q->hash & index2_mask[it_index2]] = q->px;
 				}
 				if(q->px_w<8192) {
 					q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
@@ -761,7 +762,8 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 						}
 						indexes1[it_index1][q->hash & index1_mask[it_index1]] = q->px;
 					}
-					indexes2[0][q->hash & index2_mask[0]] = q->px;
+					for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2)
+						indexes2[it_index2][q->hash & index2_mask[it_index2]] = q->px;
 				}
 				if(q->px_w<8192) {
 					q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
