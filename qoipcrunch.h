@@ -24,7 +24,6 @@ SOFTWARE.
 #define QOIPCRUNCH_H
 #include <assert.h>
 #include "qoip.h"
-#include "qoipcrunch-list.h"
 #include <inttypes.h>
 #include <stddef.h>
 
@@ -434,18 +433,18 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 								}
 							}
 						}
-						else {///*Not handled by index1 op
+						else {/*Not handled by index1 op*/
 							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
 								if(res_delta1[it_delta1]) {
 									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 										log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size++;
 									}
 								}
-								else {///*Not handled by delta1 op
+								else {/*Not handled by delta1 op*/
 									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 										if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v)
 											log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=2;
-										else {///*Not handled by index2 op
+										else {/*Not handled by index2 op*/
 											if(log_rb==8)/*rb too big for any luma op*/
 												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=4;
 											else
@@ -469,7 +468,7 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 			}
 		}
 	}
-	else {//RGBA
+	else {/*RGBA*/
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
 			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
 				q->px_prev.v = q->px.v;
@@ -497,7 +496,7 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 								}
 							}
 						}
-						else {///*Not handled by index1 op
+						else {/*Not handled by index1 op*/
 							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
 								if(res_delta1[it_delta1]) {
 									for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
@@ -506,20 +505,20 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 										}
 									}
 								}
-								else {///*Not handled by delta1 op
+								else {/*Not handled by delta1 op*/
 									for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
 										if(res_delta2[it_delta2]) {
 											for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 												log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
 											}
 										}
-										else {///*Not handled by delta2 op (deltaa)
+										else {/*Not handled by delta2 op (deltaa)*/
 											for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 												if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v) {
 													log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
 												}
-												else {///*Not handled by index2 op, add to luma_log
-													if(q->vr==0&&q->vg==0&&q->vb==0) {//OP_A
+												else {/*Not handled by index2 op*/
+													if(q->vr==0&&q->vg==0&&q->vb==0) {/*OP_A*/
 														use_a=1;
 														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
 													}
@@ -550,7 +549,7 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 			}
 		}
 	}
-	smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);// Cap last run
+	smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);/*Cap last run*/
 
 	/*Determine if 4 channel input is RGB or RGBA*/
 	isrgb = (isrgb == -1 ? 1 : isrgb);
@@ -586,19 +585,21 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 				continue;
 
 			/*Test combination*/
-			log = log_configs + LOGSTAT_INDEX_RGB(cindex[0], cindex[1], cindex[2]);
-			curr_cnt = run_lookup[256-(explicit_cnt+3)] + log->base_size;
-			int g, r, oplog[12];
-			oplog[3] = op_log_lookup[choice[3]];
-			oplog[4] = op_log_lookup[choice[4]];
-			for(g=3;g<=8;++g) {
-				for(r=2;r<=7;++r) {
-					if( r<=(oplog[3]&15) && g<=((oplog[3]>>4)&15) )
-						curr_cnt += (set_lengths[3]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
-					else if( r<=(oplog[4]&15) && g<=((oplog[4]>>4)&15) )
-						curr_cnt += (set_lengths[4]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
-					else
-						curr_cnt += (4*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
+			{
+				int g, r, oplog[12];
+				log = log_configs + LOGSTAT_INDEX_RGB(cindex[0], cindex[1], cindex[2]);
+				curr_cnt = run_lookup[256-(explicit_cnt+3)] + log->base_size;
+				oplog[3] = op_log_lookup[choice[3]];
+				oplog[4] = op_log_lookup[choice[4]];
+				for(g=3;g<=8;++g) {
+					for(r=2;r<=7;++r) {
+						if( r<=(oplog[3]&15) && g<=((oplog[3]>>4)&15) )
+							curr_cnt += (set_lengths[3]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
+						else if( r<=(oplog[4]&15) && g<=((oplog[4]>>4)&15) )
+							curr_cnt += (set_lengths[4]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
+						else
+							curr_cnt += (4*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
+					}
 				}
 			}
 
@@ -609,7 +610,7 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 			}
 		}
 	}
-	else {//RGBA
+	else {/*RGBA*/
 		sets = statops_rgba;
 		sets_cnt = statops_rgba_cnt;
 		set_cnts = rgba_cnts+(level*sets_cnt);
@@ -636,36 +637,38 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 				continue;
 
 			/*Test combination*/
-			log = log_configs + LOGSTAT_INDEX_RGBA(cindex[2], cindex[0], cindex[1], cindex[3]);
-			curr_cnt = run_lookup[256-(explicit_cnt+3)] + log->base_size;
-			int a, g, r, oplog[12];
-			for(j=4;j<sets_cnt;++j)
-				oplog[j] = op_log_lookup[choice[j]];
-			{//a=0
-				for(g=3;g<=8;++g) {
-					for(r=2;r<=7;++r) {
-						for(j=4;j<sets_cnt;++j) {
-							if( r<=(oplog[j]&15) && g<=((oplog[j]>>4)&15) ) {
-								curr_cnt += (set_lengths[j]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
-								break;
+			{
+				int a, g, r, oplog[12];
+				log = log_configs + LOGSTAT_INDEX_RGBA(cindex[2], cindex[0], cindex[1], cindex[3]);
+				curr_cnt = run_lookup[256-(explicit_cnt+3)] + log->base_size;
+				for(j=4;j<sets_cnt;++j)
+					oplog[j] = op_log_lookup[choice[j]];
+				{/*a=0*/
+					for(g=3;g<=8;++g) {
+						for(r=2;r<=7;++r) {
+							for(j=4;j<sets_cnt;++j) {
+								if( r<=(oplog[j]&15) && g<=((oplog[j]>>4)&15) ) {
+									curr_cnt += (set_lengths[j]*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
+									break;
+								}
 							}
+							if(j==sets_cnt)
+								curr_cnt += (4*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
 						}
-						if(j==sets_cnt)
-							curr_cnt += (4*log->lumalog[LUMALOG_INDEX_RGB(g, r)]);
 					}
 				}
-			}
-			for(a=2;a<=7;++a) {
-				for(g=3;g<=8;++g) {
-					for(r=2;r<=7;++r) {
-						if(      r<=(oplog[5]&15) && g<=((oplog[5]>>4)&15) && a<=((oplog[5]>>8)&15) )
-							curr_cnt += (set_lengths[5]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
-						else if( r<=(oplog[7]&15) && g<=((oplog[7]>>4)&15) && a<=((oplog[7]>>8)&15) )
-							curr_cnt += (set_lengths[7]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
-						else if( r<=(oplog[8]&15) && g<=((oplog[8]>>4)&15) && a<=((oplog[8]>>8)&15) )
-							curr_cnt += (set_lengths[8]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
-						else
-							curr_cnt += (5*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+				for(a=2;a<=7;++a) {
+					for(g=3;g<=8;++g) {
+						for(r=2;r<=7;++r) {
+							if(      r<=(oplog[5]&15) && g<=((oplog[5]>>4)&15) && a<=((oplog[5]>>8)&15) )
+								curr_cnt += (set_lengths[5]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+							else if( r<=(oplog[7]&15) && g<=((oplog[7]>>4)&15) && a<=((oplog[7]>>8)&15) )
+								curr_cnt += (set_lengths[7]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+							else if( r<=(oplog[8]&15) && g<=((oplog[8]>>4)&15) && a<=((oplog[8]>>8)&15) )
+								curr_cnt += (set_lengths[8]*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+							else
+								curr_cnt += (5*log->lumalog[LUMALOG_INDEX_RGBA(a, g, r)]);
+						}
 					}
 				}
 			}
