@@ -22,6 +22,7 @@ SOFTWARE.
 
 #ifndef QOIPCRUNCH_H
 #define QOIPCRUNCH_H
+#include <assert.h>
 #include "qoip.h"
 #include "qoipcrunch-list.h"
 #include <inttypes.h>
@@ -30,6 +31,9 @@ SOFTWARE.
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Test every op as an indidual combination */
+char *qoipcrunch_test = ",a0,c0,e0,00,20,40,60,80,42,22,23,02,26,03,e2,e3,c2,a2,84,65,43,24,04,e5,c4,a4,85,66,44,27,05,e4,c3,a3,82,62,45,25,e6,c5,a5,83,63,46,28,06,e7,c6,a6,86,64,47";
 
 /*Controller, parses options and calls appropriate crunch function */
 int qoipcrunch_encode        (const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, void *scratch, int threads, int entropy);
@@ -116,7 +120,7 @@ int qoipcrunch_encode_custom(const void *data, const qoip_desc *desc, void *out,
 */
 
 /* Calculate how many encoded bytes a run consumes with given run1/run2 sizes */
-static inline size_t qoip_sim_run(int run1_len, int run2_len, size_t run) {
+static inline size_t qoip_sim_run(size_t run1_len, size_t run2_len, size_t run) {
 	size_t ret = 0;
 	for(; run>=run2_len; run-=run2_len)
 		ret += 2;
@@ -127,7 +131,7 @@ static inline size_t qoip_sim_run(int run1_len, int run2_len, size_t run) {
 	return ret;
 }
 
-static size_t run_tot(int run1, int run2, size_t *run_short, size_t *run_long, size_t run_long_cnt) {
+static size_t run_tot(size_t run1, size_t run2, size_t *run_short, size_t *run_long, size_t run_long_cnt) {
 	size_t k, ret = 0;
 	for(k=0;k<256;++k)/*short runs*/
 		ret += run_short[k]*qoip_sim_run(run1, run2, k+1);
@@ -145,7 +149,7 @@ static inline void smart_encode_run(qoip_working_t *q, size_t *run_short, size_t
 				*run_cap += 1024;
 				*run_long = realloc(*run_long, sizeof(size_t)*(*run_cap));
 			}
-			*run_long[*run_long_cnt++] = q->run;
+			(*run_long)[(*run_long_cnt)++] = q->run;
 		}
 		q->run = 0;
 	}
@@ -240,7 +244,7 @@ static inline int qoip_sim_luma1_232(qoip_working_t *q) {
 
 typedef struct {
 	size_t base_size;//Size of index1/index2/delta1 encodings combined
-	size_t lumalog[6*6*8];
+	size_t lumalog[8*6*6];
 } logstat;
 
 /* Full log of range -128..127, except that logs of 1 are clamped to 2 */
@@ -327,7 +331,7 @@ static inline void smarter_gen_common(qoip_working_t *q, int *log_g, int *log_rb
 	q->avg_gr = q->avg_r - q->avg_g;
 	q->avg_gb = q->avg_b - q->avg_g;
 	log_r  = log_lookup_2_8[q->avg_gr + 128];
-	*log_g  = log_lookup_3_8[q->avg_g  + 128];
+	*log_g = log_lookup_3_8[q->avg_g  + 128];
 	log_b  = log_lookup_2_8[q->avg_gb + 128];
 	*log_rb = log_r>log_b?log_r:log_b;
 }
@@ -360,11 +364,13 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	const u8 statop_rgba2[] = {255, OP_LUMA2_3433, OP_LUMA2_3533, OP_LUMA2_3534, OP_LUMA2_2322, OP_LUMA2_2422, OP_LUMA2_2423, OP_LUMA2_3432};
 	const u8 statop_rgba3[] = {255, OP_LUMA3_4543, OP_LUMA3_4544, OP_LUMA3_4644, OP_LUMA3_4645, OP_LUMA3_5654, OP_LUMA3_5655, OP_LUMA3_5755, OP_LUMA3_5756};
 	const u8 statop_rgba4[] = {255, OP_LUMA4_6866, OP_LUMA4_7876, OP_LUMA4_6766, OP_LUMA4_6765, OP_LUMA4_6867, OP_LUMA4_7877};
+	/*To guarantee that RGB input fed in as 3/4 channel is handled the same,
+	rgb_cnts has to mirror the equivalent values in rgba_cnts*/
 	int rgb_cnts[] = {
 		2, 2,    1, 2,    2,/*level 0*/
 		3, 4,    1, 4,    2,/*level 1*/
-		5, 5,    2, 5,    4,/*level 2*/
-		5, 5,    2, 6,    5,/*level 3*/
+		5, 4,    2, 5,    4,/*level 2*/
+		5, 4,    2, 6,    5,/*level 3*/
 		5, 5,    3, 7,    6,/*level 4*/
 		5, 5,    3, 8,    7,/*level 5*/
 	};
@@ -547,7 +553,7 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);// Cap last run
 
 	/*Determine if 4 channel input is RGB or RGBA*/
-	isrgb = isrgb == -1 ? 1 : isrgb;
+	isrgb = (isrgb == -1 ? 1 : isrgb);
 
 	/* Process run data into lookup table to avoid redoing work */
 	for(i=0;i<64;++i)
@@ -571,6 +577,7 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 				choice[j] = sets[j][comb%set_cnts[j]];
 				comb /= set_cnts[j];
 			}
+
 			/*Find explicit length*/
 			explicit_cnt = 0;
 			for(j=0;j<sets_cnt;++j)
@@ -679,14 +686,24 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 				strloc+=2;
 			}
 		}
-		if(use_a)
+		if(use_a) {
 			sprintf(opstr+strloc, "%02x", OP_A);
+			strloc+=2;
+		}
+		/*Get exact size for checks*/
+		best_cnt += (strloc>12 ? 48 : 40);
+		for(;best_cnt%8ull;++best_cnt);
 	}
 
 	if(run_long)
 		free(run_long);
 
-	return qoip_encode(data, desc, out, out_len, opstr, entropy, scratch);
+	{
+		int ret;
+		ret = qoip_encode(data, desc, out, out_len, opstr, entropy, scratch);
+		assert(*out_len == best_cnt);
+		return ret;
+	}
 }
 
 #endif /* QOIPCRUNCH_C */
