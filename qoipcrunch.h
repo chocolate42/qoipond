@@ -82,7 +82,7 @@ int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t
 	if(level==-1)     /*Custom string*/
 		return qoipcrunch_encode_custom(data, desc, out, out_len, effort, tmp, threads, entropy);
 	else if(level==0) /*Escape hatch to use best (known, on average) combination*/
-		return qoip_encode(data, desc, out, out_len, "a04002e224c482c5a6", entropy, tmp);
+		return qoip_encode(data, desc, out, out_len, "02244082a0a6c4c5e2", entropy, tmp);
 	else              /*Search orders of magnitude more combinations with log tables, level 0..5*/
 		return qoipcrunch_encode_smarter(data, desc, out, out_len, level-1, tmp, threads, entropy);
 	return 1;
@@ -310,31 +310,6 @@ enum {STATOP_INDEX1_CNT=5, STATOP_RGB1_CNT=5, STATOP_RGBA1_CNT=2, STATOP_INDEX2_
 #define LUMALOG_INDEX_RGBA(a, b, c) (((a)*36)+(((b)-3)*6)+((c)-2))
 #define LUMALOG_INDEX_RGB(b, c)              ((((b)-3)*6)+((c)-2))
 
-/*Functions to deduplicate code*/
-static inline void smarter_gen_common(qoip_working_t *q, int *log_g, int *log_rb) {
-	int log_r, log_b;
-	if (q->px_w<8192) {
-		q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0]+1) >> 1;
-		q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1]+1) >> 1;
-		q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2]+1) >> 1;
-	}
-	else
-		q->px_ref.v = q->px_prev.v;
-	q->hash = QOIP_COLOR_HASH(q->px);
-	q->vr = q->px.rgba.r - q->px_prev.rgba.r;
-	q->vg = q->px.rgba.g - q->px_prev.rgba.g;
-	q->vb = q->px.rgba.b - q->px_prev.rgba.b;
-	q->avg_r = q->px.rgba.r - q->px_ref.rgba.r;
-	q->avg_g = q->px.rgba.g - q->px_ref.rgba.g;
-	q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
-	q->avg_gr = q->avg_r - q->avg_g;
-	q->avg_gb = q->avg_b - q->avg_g;
-	log_r  = log_lookup_2_8[q->avg_gr + 128];
-	*log_g = log_lookup_3_8[q->avg_g  + 128];
-	log_b  = log_lookup_2_8[q->avg_gb + 128];
-	*log_rb = log_r>log_b?log_r:log_b;
-}
-
 int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out, size_t *out_len, int level, void *scratch, int threads, int entropy) {
 	int isrgb=-1, use_a=0;
 	size_t *run_long=NULL, run_cap=0, run_long_cnt=0, run_short[256] = {0}, run_lookup[256];
@@ -396,7 +371,7 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	const int *set_cnts;
 	const int *set_lengths;
 
-	int log_g, log_rb, log_a, lumalog_loc;
+	int log_g, log_r, log_b, log_rb, log_a, lumalog_loc;
 	logstat *log, log_configs[STATOP_CNT_MAX] = {0};
 
 	int it_index1, it_index2, it_delta1, it_delta2;
@@ -421,7 +396,12 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 					++q->run;
 				else {
 					smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);
-					smarter_gen_common(q, &log_g, &log_rb);
+					q->hash = QOIP_COLOR_HASH(q->px);
+					qoip_gen_var_rgb(q);
+					log_r = log_lookup_2_8[q->avg_gr + 128];
+					log_g = log_lookup_3_8[q->avg_g  + 128];
+					log_b = log_lookup_2_8[q->avg_gb + 128];
+					log_rb = log_r>log_b?log_r:log_b;
 					lumalog_loc = LUMALOG_INDEX_RGB(log_g, log_rb);
 					for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1)
 						res_delta1[it_delta1] = sim_delta1[it_delta1](q);
@@ -477,7 +457,12 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 					++q->run;
 				else {
 					smart_encode_run(q, run_short, &run_long, &run_long_cnt, &run_cap);
-					smarter_gen_common(q, &log_g, &log_rb);
+					q->hash = QOIP_COLOR_HASH(q->px);
+					qoip_gen_var_rgb(q);
+					log_r = log_lookup_2_8[q->avg_gr + 128];
+					log_g = log_lookup_3_8[q->avg_g  + 128];
+					log_b = log_lookup_2_8[q->avg_gb + 128];
+					log_rb = log_r>log_b?log_r:log_b;
 					q->va = q->px.rgba.a - q->px_prev.rgba.a;
 					log_a  = log_lookup_0_2_8[q->va     + 128];
 					if(log_a)

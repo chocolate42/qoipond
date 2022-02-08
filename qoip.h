@@ -162,6 +162,9 @@ is its size in bytes. opcode_string defines the opcode combination to use. It is
 to the caller to ensure this string is valid */
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string, int entropy, void *scratch);
 
+/* Generate v* and avg_* variables, used in many encode functions */
+inline void qoip_gen_var_rgb(qoip_working_t *q);
+
 /*Init q, used internally by qoip_encode and qoipcrunch_encode_* */
 void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_desc *desc);
 
@@ -197,8 +200,8 @@ int qoip_stat(const void *encoded, FILE *io);
 
 
 /* Parse an ascii char as a hex value, return -1 on failure */
-inline int qoip_valid_hex(u8 chr);
-inline const opdef_t* qoip_op_lookup(u8 id);
+int qoip_valid_hex(u8 chr);
+const opdef_t* qoip_op_lookup(u8 id);
 
 #ifdef __cplusplus
 }
@@ -464,7 +467,7 @@ size_t qoip_maxsize_raw(const qoip_desc *desc, int channels) {
 }
 
 /* Parse an ascii char as a hex value, return -1 on failure */
-inline int qoip_valid_hex(u8 chr) {
+int qoip_valid_hex(u8 chr) {
 	if(chr>='0' && chr<='9')
 		return chr - '0';
 	else if(chr>='a' && chr<='f')
@@ -474,7 +477,7 @@ inline int qoip_valid_hex(u8 chr) {
 	return -1;
 }
 
-inline const opdef_t* qoip_op_lookup(u8 id) {
+const opdef_t* qoip_op_lookup(u8 id) {
 	int i;
 	for(i=0;i<qoip_ops_cnt;++i) {
 		if(qoip_ops[i].id==id)
@@ -485,7 +488,7 @@ inline const opdef_t* qoip_op_lookup(u8 id) {
 
 /* Parse opstring into opcodes sorted by id */
 static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
-	int i=0, num, index1_present=0;
+	int i=0, num, index1_present=0, index2_present=0;
 	int opcodes_present[OP_END] = {0};
 	const opdef_t *opdef;
 	for(; opstr[i] && opstr[i]!=','; ++i) {
@@ -510,10 +513,14 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 				return 4;/* Invalid op id */
 			if(opdef->set == QOIP_SET_INDEX1)
 				++index1_present;
+			if(opdef->set == QOIP_SET_INDEX2)
+				++index2_present;
 		}
 	}
 	if(index1_present>1)
 		return 5;/* Multiple 1 byte index encodings, invalid combination */
+	if(index2_present>1)
+		return 6;/* Multiple 1 byte index encodings, invalid combination */
 	return 0;
 }
 
@@ -731,19 +738,52 @@ int qoip_stat(const void *encoded, FILE *io) {
 /* fastpath definitions */
 #include "qoip-fast.c"
 typedef struct {
-	char *opstr;
-	int (*enc)(qoip_working_t*, size_t*);
+	u8 opstr[16];
+	int (*enc)(qoip_working_t*, size_t*, void*, int);
 	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
-int qoip_fastpath_cnt = 0;/*Disabled for average implementation as it breaks these TODO*/
+int qoip_fastpath_cnt = 1;
 /*Refactor from opstring to bytestring ids when fixing as opstr has been removed*/
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{0}
-	/*{"0003080a0b11", qoip_encode_deltax, qoip_decode_deltax},
-	//{"0001060a0f", qoip_encode_idelta, qoip_decode_idelta},
-	//{"03070a0d0f", qoip_encode_propc, qoip_decode_propc},*/
+	{{9, OP_LUMA1_232B, OP_LUMA2_464, OP_INDEX5, OP_LUMA3_676, OP_INDEX10, OP_LUMA4_6866, OP_LUMA2_2322, OP_LUMA3_4544, OP_A}, qoip_encode_effort0, NULL},
 };
+
+static inline int qoip_fastpath_match(u8 *key, const qoip_fastpath_t *fast) {
+	int i;
+	for (i=0;i<=key[0];++i) {
+		if (key[i]!=fast->opstr[i])
+			return 1;
+	}
+	return 0;
+}
+
+static inline int qoip_fastpath_find(u8 *key) {
+	int i;
+	for (i=0;i<qoip_fastpath_cnt;++i) {
+		if (qoip_fastpath_match(key, qoip_fastpath + i) == 0)
+			return i;
+	}
+	return -1;
+}
+
+inline void qoip_gen_var_rgb(qoip_working_t *q) {
+	if (q->px_w<8192) {
+		q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0]+1) >> 1;
+		q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1]+1) >> 1;
+		q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2]+1) >> 1;
+	}
+	else
+		q->px_ref.v = q->px_prev.v;
+	q->vr = q->px.rgba.r - q->px_prev.rgba.r;
+	q->vg = q->px.rgba.g - q->px_prev.rgba.g;
+	q->vb = q->px.rgba.b - q->px_prev.rgba.b;
+	q->avg_r = q->px.rgba.r - q->px_ref.rgba.r;
+	q->avg_g = q->px.rgba.g - q->px_ref.rgba.g;
+	q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
+	q->avg_gr = q->avg_r - q->avg_g;
+	q->avg_gb = q->avg_b - q->avg_g;
+}
 
 static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int op_cnt) {
 	int i;
@@ -752,23 +792,9 @@ static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 	else {
 		qoip_encode_run(q);
 		/* generate variables that may be needed by ops */
-		if (q->px_w<8192) {
-			q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
-			q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
-			q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
-		}
-		else
-			q->px_ref.v = q->px_prev.v;
 		q->hash = QOIP_COLOR_HASH(q->px);
-		q->vr = q->px.rgba.r - q->px_prev.rgba.r;
-		q->vg = q->px.rgba.g - q->px_prev.rgba.g;
-		q->vb = q->px.rgba.b - q->px_prev.rgba.b;
+		qoip_gen_var_rgb(q);
 		q->va = q->px.rgba.a - q->px_prev.rgba.a;
-		q->avg_r = q->px.rgba.r - q->px_ref.rgba.r;
-		q->avg_g = q->px.rgba.g - q->px_ref.rgba.g;
-		q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
-		q->avg_gr = q->avg_r - q->avg_g;
-		q->avg_gb = q->avg_b - q->avg_g;
 		/* Test every op until we find one that handles the pixel */
 		for(i=0;i<op_cnt;++i){
 			if(op[i].enc(q, op[i].opcode))
@@ -819,7 +845,7 @@ void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_de
 }
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring, int entropy, void *scratch) {
-	int op_cnt = 0;
+	int fast, op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];
@@ -836,7 +862,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		return qoip_ret(13, stderr, "qoip_encode: Scratch space needs to be provided for entropy encoding");
 
 	if(opstring == NULL || *opstring==0)
-		opstring = "";//"e04002246263";/*L232B + I5 ...*/
+		opstring = "02244082a0a6c4c5e2";
 	if(parse_opstring(opstring, ops, &op_cnt))
 		return qoip_ret(14, stderr, "qoip_encode: Failed to parse opstring");
 	if(qoip_expand_opcodes(&op_cnt, ops, q))
@@ -845,11 +871,8 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	qoip_write_bitstream_header(q->out, &q->p, desc, ops, op_cnt);
 	q->bitstream_loc = q->p;
 
-	/* Check for fastpath implementation */
-	/*for(i=0;i<qoip_fastpath_cnt;++i) {
-		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].enc)
-			return qoip_fastpath[i].enc(q, out_len);
-	}*/
+	if ((fast=qoip_fastpath_find(q->out+25))!=-1 && qoip_fastpath[fast].enc)
+		return qoip_fastpath[fast].enc(q, out_len, scratch, entropy);
 
 	/* Sort ops into order they should be tested on encode */
 	qoip_sort_set(ops, op_cnt);
@@ -993,11 +1016,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	q->px.v = 0;
 	q->px.rgba.a = 255;
 
-	/* Check for fastpath implementation */
-	/*for(i=0;i<qoip_fastpath_cnt;++i) {
-		if(strcmp(opstr, qoip_fastpath[i].opstr)==0 && qoip_fastpath[i].dec)
-			return qoip_fastpath[i].dec(q, desc->entropy?desc->raw_cnt:data_len);
-	}*/
+	/* Fastpath TODO */
 
 	q->px_pos = 0;
 	if(q->channels==4) {
