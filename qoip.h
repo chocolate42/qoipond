@@ -751,7 +751,7 @@ typedef struct {
 int qoip_fastpath_cnt = 2;
 /*Refactor from opstring to bytestring ids when fixing as opstr has been removed*/
 static const qoip_fastpath_t qoip_fastpath[] = {
-	{{9, OP_LUMA1_232B, OP_LUMA2_464, OP_INDEX5, OP_LUMA3_676, OP_INDEX10, OP_LUMA4_6866, OP_LUMA2_2322, OP_LUMA3_4544, OP_A}, qoip_encode_effort0, NULL},
+	{{9, OP_LUMA1_232B, OP_LUMA2_464, OP_INDEX5, OP_LUMA3_676, OP_INDEX10, OP_LUMA4_6866, OP_LUMA2_2322, OP_LUMA3_4544, OP_A}, qoip_encode_effort0, qoip_decode_effort0},
 	{{5, OP_LUMA1_232, OP_LUMA2_454, OP_LUMA2_3433, OP_LUMA3_5655, OP_LUMA3_676}, qoip_encode_fast1, qoip_decode_fast1},
 };
 

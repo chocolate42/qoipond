@@ -237,6 +237,135 @@ int qoip_encode_effort0(qoip_working_t *q, size_t *out_len, void *scratch, int e
 	return 0;
 }
 
+static inline void qoip_decode_effort0_inner(qoip_working_t *q) {
+	int b1, b2, b3, b4, index, vg;
+	if (q->run > 0)
+		--q->run;
+	else if (q->p < q->in_tot) {
+		q->px_prev.v = q->px.v;
+		if (q->px_pos >= q->stride && q->px_w<8192) {
+			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
+			q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
+			q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
+		}
+		else
+			q->px_ref.v = q->px_prev.v;
+
+		b1 = q->in[q->p++];
+		if(      (b1 & QOIP_MASK_1) == E0_LUMA1_232B ) {
+			vg = ((b1 >> 4) & 7) - 4;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			if (vg < 0) {
+				q->px.rgba.r = q->px_ref.rgba.r + vg - 1 + ((b1 >> 2) & 3);
+				q->px.rgba.b = q->px_ref.rgba.b + vg - 1 +  (b1 &  3);
+			}
+			else {
+				q->px.rgba.r = q->px_ref.rgba.r + vg - 2 + ((b1 >> 2) & 3);
+				q->px.rgba.b = q->px_ref.rgba.b + vg - 2 +  (b1 &  3);
+			}
+		}
+		else if( (b1 & QOIP_MASK_2) == E0_LUMA2_464 ) {
+			b2 = q->in[q->p++];
+			vg = ((b1 >> 0) & 63) - 32;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
+		}
+		else if( (b1 & QOIP_MASK_3) == E0_INDEX5 ) {
+			q->px = q->index[b1 & 31];
+		}
+		else if( (b1 & QOIP_MASK_5) == E0_LUMA3_676 ) {
+			b2 = q->in[q->p++];
+			b3 = q->in[q->p++];
+			vg = (((b1 & 7) << 4) | (b2 >> 4)) - 64;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
+		}
+		else if( (b1 & QOIP_MASK_6) == E0_INDEX10 ) {
+			index = (b1 & 3) << 8;
+			index |= q->in[q->p++];
+			q->px = q->index2[index];
+		}
+		else if( (b1 & QOIP_MASK_6) == E0_LUMA4_6866 ) {
+			b2 = q->in[q->p++];
+			b3 = q->in[q->p++];
+			b4 = q->in[q->p++];
+			vg = (((b1 & 3) << 6) | (b2 >> 2)) - 128;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 3) << 4) | (b3 >> 4)) - 32;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + (((b3 & 15) << 2) | (b4 >> 6)) - 32;
+			q->px.rgba.a += ((b4 & 63) - 32);
+		}
+		else if( (b1 & QOIP_MASK_7) == E0_LUMA2_2322 ) {
+			b2 = q->in[q->p++];
+			vg = (((b1 & 1) << 2) | (b2 >> 6)) - 4;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 3) - 2;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 2) & 3) - 2;
+			q->px.rgba.a += ((b2 & 3) - 2);
+		}
+		else if( (b1 & QOIP_MASK_7) == E0_LUMA3_4544 ) {
+			b2 = q->in[q->p++];
+			b3 = q->in[q->p++];
+			vg = (((b1 & 1) << 4) | (b2 >> 4)) - 16;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 0) & 15) - 8;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 4) & 15) - 8;
+			q->px.rgba.a += ((b3 & 15) - 8);
+		}
+		else if( b1 == E0_A ) {
+			q->px.rgba.a = q->in[q->p++];
+		}
+		else if( b1 == E0_RGB ) {
+			q->px.rgba.r = q->in[q->p++];
+			q->px.rgba.g = q->in[q->p++];
+			q->px.rgba.b = q->in[q->p++];
+		}
+		else if( b1 == E0_RGBA ) {
+			q->px.rgba.r = q->in[q->p++];
+			q->px.rgba.g = q->in[q->p++];
+			q->px.rgba.b = q->in[q->p++];
+			q->px.rgba.a = q->in[q->p++];
+		}
+		else if( b1 == E0_RUN2 )
+			q->run = q->in[q->p++] + 8;
+		else
+			q->run = b1 - E0_RUN1;
+	}
+	q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px;
+	q->index2[QOIP_COLOR_HASH(q->px) & q->index2_maxval] = q->px;
+	if(q->px_w<8192) {
+		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
+		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
+		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
+	}
+}
+
+int qoip_decode_effort0(qoip_working_t *q) {
+	if(q->channels==4) {
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				qoip_decode_effort0_inner(q);
+				*(qoip_rgba_t*)(q->out + q->px_pos) = q->px;
+				q->px_pos += 4;
+			}
+		}
+	}
+	else {
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				qoip_decode_effort0_inner(q);
+				q->out[q->px_pos + 0] = q->px.rgba.r;
+				q->out[q->px_pos + 1] = q->px.rgba.g;
+				q->out[q->px_pos + 2] = q->px.rgba.b;
+				q->px_pos += 3;
+			}
+		}
+	}
+	return 0;
+}
+
 /* -effort -1 */
 enum{FAST1_LUMA1_232=0x00, FAST1_LUMA2_454=0x80, FAST1_LUMA2_3433=0xa0, FAST1_LUMA3_5655=0xc0, FAST1_LUMA3_676=0xe0, FAST1_RGB=0xe8, FAST1_RGBA=0xe9, FAST1_RUN2=0xea, FAST1_RUN1=0xeb};
 
@@ -393,58 +522,58 @@ static inline void qoip_decode_fast1_inner(qoip_working_t *q) {
 
 		b1 = q->in[q->p++];
 		if(      (b1 & QOIP_MASK_1) == FAST1_LUMA1_232 ) {
-				vg = ((b1 >> 4) & 7) - 4;
-				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b1 >> 2) & 3) - 2;
-				q->px.rgba.g = q->px_ref.rgba.g + vg;
-				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b1 >> 0) & 3) - 2;
+			vg = ((b1 >> 4) & 7) - 4;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + ((b1 >> 2) & 3) - 2;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b1 >> 0) & 3) - 2;
 		}
 		else if( (b1 & QOIP_MASK_3) == FAST1_LUMA2_454 ) {
-				b2 = q->in[q->p++];
-				vg = ((b1 >> 0) & 31) - 16;
-				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
-				q->px.rgba.g = q->px_ref.rgba.g + vg;
-				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
+			b2 = q->in[q->p++];
+			vg = ((b1 >> 0) & 31) - 16;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
 		}
 		else if( (b1 & QOIP_MASK_3) == FAST1_LUMA2_3433 ) {
-				b2 = q->in[q->p++];
-				vg = ((b1 >> 1) & 15) - 8;
-				q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 1) << 2) | (b2 >> 6)) - 4;
-				q->px.rgba.g = q->px_ref.rgba.g + vg;
-				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 3) & 7) - 4;
-				q->px.rgba.a += ((b2 & 7) - 4);
+			b2 = q->in[q->p++];
+			vg = ((b1 >> 1) & 15) - 8;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 1) << 2) | (b2 >> 6)) - 4;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 3) & 7) - 4;
+			q->px.rgba.a += ((b2 & 7) - 4);
 		}
 		else if( (b1 & QOIP_MASK_3) == FAST1_LUMA3_5655 ) {
-				b2 = q->in[q->p++];
-				b3 = q->in[q->p++];
-				vg = (((b1 & 31) << 1) | (b2 >> 7)) - 32;
-				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 2) & 31) - 16;
-				q->px.rgba.g = q->px_ref.rgba.g + vg;
-				q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
-				q->px.rgba.a += ((b3 & 31) - 16);
+			b2 = q->in[q->p++];
+			b3 = q->in[q->p++];
+			vg = (((b1 & 31) << 1) | (b2 >> 7)) - 32;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 2) & 31) - 16;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
+			q->px.rgba.a += ((b3 & 31) - 16);
 		}
 		else if( (b1 & QOIP_MASK_5) == FAST1_LUMA3_676 ) {
-				b2 = q->in[q->p++];
-				b3 = q->in[q->p++];
-				vg = (((b1 & 7) << 4) | (b2 >> 4)) - 64;
-				q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
-				q->px.rgba.g = q->px_ref.rgba.g + vg;
-				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
+			b2 = q->in[q->p++];
+			b3 = q->in[q->p++];
+			vg = (((b1 & 7) << 4) | (b2 >> 4)) - 64;
+			q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
+			q->px.rgba.g = q->px_ref.rgba.g + vg;
+			q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
 		}
 		else if( b1 == FAST1_RGB ) {
-				q->px.rgba.r = q->in[q->p++];
-				q->px.rgba.g = q->in[q->p++];
-				q->px.rgba.b = q->in[q->p++];
+			q->px.rgba.r = q->in[q->p++];
+			q->px.rgba.g = q->in[q->p++];
+			q->px.rgba.b = q->in[q->p++];
 		}
 		else if( b1 == FAST1_RGBA ) {
-				q->px.rgba.r = q->in[q->p++];
-				q->px.rgba.g = q->in[q->p++];
-				q->px.rgba.b = q->in[q->p++];
-				q->px.rgba.a = q->in[q->p++];
+			q->px.rgba.r = q->in[q->p++];
+			q->px.rgba.g = q->in[q->p++];
+			q->px.rgba.b = q->in[q->p++];
+			q->px.rgba.a = q->in[q->p++];
 		}
 		else if( b1 == FAST1_RUN2 )
-				q->run = q->in[q->p++] + 21;
+			q->run = q->in[q->p++] + 21;
 		else
-				q->run = b1 - FAST1_RUN1;
+			q->run = b1 - FAST1_RUN1;
 	}
 	if(q->px_w<8192) {
 		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
