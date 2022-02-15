@@ -155,13 +155,13 @@ enum{QOIP_SET_INDEX1, QOIP_SET_LEN1, QOIP_SET_INDEX2, QOIP_SET_LEN2, QOIP_SET_LE
 /* Decode a QOIP image from memory. The function either returns >0 on failure
 (invalid parameters) or 0 on success. On success, the qoip_desc struct is filled
 with the description from the file header. */
-int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out, void *scratch);
+int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const int channels, void *out, void *scratch);
 
 /* Encode raw RGB or RGBA pixels into a QOIP image in memory. The function either
 returns >0 on failure or 0 on success. On success out is the encoded data, out_len
 is its size in bytes. opcode_string defines the opcode combination to use. It is up
 to the caller to ensure this string is valid */
-int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string, int entropy, void *scratch);
+int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, const char *opcode_string, const int entropy, void *scratch);
 
 /* Generate v* and avg_* variables, used in many encode functions */
 void qoip_gen_var_rgb(qoip_working_t *q);
@@ -194,7 +194,7 @@ This exists to avoid exposing internals with qoip_read_bitstream_header */
 int qoip_skip_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc *desc);
 
 /* Print s to io and return ret, typically used to print error and return error code */
-int qoip_ret(int ret, FILE *io, char *s);
+int qoip_ret(const int ret, FILE *io, const char *s);
 
 /* Print details from a QOIP file */
 int qoip_stat(const void *encoded, FILE *io);
@@ -294,7 +294,7 @@ void qoip_print_op(const opdef_t *op, FILE *io) {
 	fprintf(io, "%s, id=%02x\n", op->desc, op->id);
 }
 
-static inline void qoip_memcpy(void *d, void *s, size_t len) {
+static inline void qoip_memcpy(void *d, void *s, const size_t len) {
 	size_t i;
 	for(i=0;i<len;++i)
 		((char*)d)[i]=((char*)s)[i];
@@ -306,7 +306,7 @@ static inline void qoip_opcode_swap(qoip_opcode_t *a, qoip_opcode_t *b) {
 	qoip_memcpy(b, &t, sizeof(qoip_opcode_t));
 }
 /* Bad sort algorithm but set is tiny so it's fine */
-static inline void qoip_sort_set(qoip_opcode_t *ops, int op_cnt) {
+static inline void qoip_sort_set(qoip_opcode_t *ops, const int op_cnt) {
 	int i, j;
 	for(i=0;i<op_cnt;++i) {
 		for(j=i+1;j<op_cnt;++j) {
@@ -410,7 +410,7 @@ int qoip_read_header(const unsigned char *bytes, size_t *p, qoip_desc *desc) {
 	return 0;
 }
 
-static void qoip_write_32(unsigned char *bytes, size_t *p, u32 v) {
+static void qoip_write_32(unsigned char *bytes, size_t *p, const u32 v) {
 	bytes[(*p)++] = (v      ) & 0xff;
 	bytes[(*p)++] = (v >>  8) & 0xff;
 	bytes[(*p)++] = (v >> 16) & 0xff;
@@ -468,7 +468,7 @@ size_t qoip_maxsize_raw(const qoip_desc *desc, int channels) {
 }
 
 /* Parse an ascii char as a hex value, return -1 on failure */
-int qoip_valid_hex(u8 chr) {
+int qoip_valid_hex(const u8 chr) {
 	if(chr>='0' && chr<='9')
 		return chr - '0';
 	else if(chr>='a' && chr<='f')
@@ -478,7 +478,7 @@ int qoip_valid_hex(u8 chr) {
 	return -1;
 }
 
-const opdef_t* qoip_op_lookup(u8 id) {
+const opdef_t* qoip_op_lookup(const u8 id) {
 	int i;
 	for(i=0;i<qoip_ops_cnt;++i) {
 		if(qoip_ops[i].id==id)
@@ -488,7 +488,7 @@ const opdef_t* qoip_op_lookup(u8 id) {
 }
 
 /* Parse opstring into opcodes sorted by id */
-static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
+static int parse_opstring(const char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 	int i=0, num, index1_present=0, index2_present=0;
 	int opcodes_present[OP_END] = {0};
 	const opdef_t *opdef;
@@ -526,7 +526,7 @@ static int parse_opstring(char *opstr, qoip_opcode_t *ops, int *op_cnt) {
 }
 
 /* Generate everything related to an opcode, including the opcode itself */
-static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *q) {
+static int qoip_expand_opcodes(const int *op_cnt, qoip_opcode_t *ops, qoip_working_t *q) {
 	int i, op = 0;
 	const opdef_t *opdef;
 	for(i=0;i<*op_cnt;++i) {
@@ -559,7 +559,8 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 
 static inline void qoip_encode_run(qoip_working_t *q) {
 	if(q->run) {
-		size_t quot = q->run/q->run2_len, rem = q->run%q->run2_len, i;
+		const size_t quot = q->run/q->run2_len, rem = q->run%q->run2_len;
+		size_t i;
 		for(i=0;i<quot;++i) {
 			q->out[q->p++] = q->run2_opcode;
 			q->out[q->p++] = 255;
@@ -574,7 +575,7 @@ static inline void qoip_encode_run(qoip_working_t *q) {
 	}
 }
 
-int qoip_ret(int ret, FILE *io, char *s) {
+int qoip_ret(const int ret, FILE *io, const char *s) {
 	fprintf(io, "%s\n", s);
 	return ret;
 }
@@ -591,7 +592,7 @@ static void qoip_finish(qoip_working_t *q) {
 	qoip_write_64(q->out+8, q->p-q->bitstream_loc);
 }
 
-size_t qoip_maxentropysize(size_t src, int entropy) {
+size_t qoip_maxentropysize(const size_t src, const int entropy) {
 	switch(entropy) {
 		case 0:
 			return src;
@@ -625,7 +626,7 @@ static int qoip_dic_load() {
 }
 
 /* Bolted-on entropy encoding implementation, this way it can be reused */
-static int qoip_entropy(void *out, size_t *out_len, void *scratch, int entropy) {
+static int qoip_entropy(void *out, size_t *out_len, void *scratch, const int entropy) {
 	unsigned char *ptr = (unsigned char*)out;
 	int ret;
 	size_t p = 0, src_cnt, dst_cnt, loc_bithead, loc_bitstream;
@@ -790,7 +791,7 @@ inline void qoip_gen_var_rgb(qoip_working_t *q) {
 	q->avg_gb = q->avg_b - q->avg_g;
 }
 
-static inline void qoip_encode_inner(qoip_working_t *q, qoip_opcode_t *op, int op_cnt) {
+static inline void qoip_encode_inner(qoip_working_t *q, const qoip_opcode_t *op, const int op_cnt) {
 	int i;
 	if (q->px.v == q->px_prev.v)
 		++q->run;/* Accumulate as much RLE as there is */
@@ -849,7 +850,7 @@ void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_de
 	}
 }
 
-int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opstring, int entropy, void *scratch) {
+int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, const char *opstring, const int entropy, void *scratch) {
 	int fast, op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
@@ -913,7 +914,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	return 0;
 }
 
-static inline void qoip_decode_inner(qoip_working_t *q, qoip_opcode_t *op, int op_cnt) {
+static inline void qoip_decode_inner(qoip_working_t *q, const qoip_opcode_t *op, const int op_cnt) {
 	int i;
 	if (q->run > 0)
 		--q->run;
@@ -963,7 +964,7 @@ static inline void qoip_decode_inner(qoip_working_t *q, qoip_opcode_t *op, int o
 	}
 }
 
-int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out, void *scratch) {
+int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const int channels, void *out, void *scratch) {
 	char opstr[513] = {0};
 	int fast, i, op_cnt, ret;
 	qoip_working_t qq = {0};
