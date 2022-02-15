@@ -135,23 +135,18 @@ void qoip_dec_diff1_222(qoip_working_t *q) {
 }
 
 int qoip_enc_luma1_232_bias(qoip_working_t *q, u8 opcode) {
-	if (
-		q->va == 0 &&
-		q->avg_g   > -5 && q->avg_g   < 0 &&
-		q->avg_gr > -2 && q->avg_gr < 3 &&
-		q->avg_gb > -2 && q->avg_gb < 3
-	) {
-		q->out[q->p++] = opcode | (q->avg_g + 4) << 4 | (q->avg_gr + 1) << 2 | (q->avg_gb + 1);
-		return 1;
-	}
-	else if (
-		q->va == 0 &&
-		q->avg_g   > -1 && q->avg_g   < 4 &&
-		q->avg_gr > -3 && q->avg_gr < 2 &&
-		q->avg_gb > -3 && q->avg_gb < 2
-	) {
-		q->out[q->p++] = opcode | (q->avg_g + 4) << 4 | (q->avg_gr + 2) << 2 | (q->avg_gb + 2);
-		return 1;
+	if ( q->va == 0 &&
+		q->avg_g > -5 && q->avg_g < 4 &&
+		q->avg_gr > -3 && q->avg_gr < 3 &&
+		q->avg_gb > -3 && q->avg_gb < 3 ) {
+		if (      q->avg_g <  0 && q->avg_gr > -2 && q->avg_gb > -2 ) {
+			q->out[q->p++] = opcode | (q->avg_g + 4) << 4 | (q->avg_gr + 1) << 2 | (q->avg_gb + 1);
+			return 1;
+		}
+		else if ( q->avg_g > -1 && q->avg_gr <  2 && q->avg_gb <  2 ) {
+			q->out[q->p++] = opcode | (q->avg_g + 4) << 4 | (q->avg_gr + 2) << 2 | (q->avg_gb + 2);
+			return 1;
+		}
 	}
 	return 0;
 }

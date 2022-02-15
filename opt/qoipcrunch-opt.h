@@ -101,8 +101,8 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 		}
 		else if(strcmp("-effort", argv[loc])==0){
 			opt->effort=atoi(argv[loc+1]);
-			if(opt->effort<0){
-				fprintf(stderr, "Error, -effort value must be at least 0\n");
+			if(opt->effort<-1){
+				fprintf(stderr, "Error, -effort value must be at least -1\n");
 				return 1;
 			}
 			else if(opt->effort>6){

@@ -77,6 +77,7 @@ Implementing new ops tl;dr:
 #include <stdio.h>
 typedef   int8_t  i8;
 typedef  uint8_t  u8;
+typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
@@ -163,7 +164,7 @@ to the caller to ensure this string is valid */
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *opcode_string, int entropy, void *scratch);
 
 /* Generate v* and avg_* variables, used in many encode functions */
-inline void qoip_gen_var_rgb(qoip_working_t *q);
+void qoip_gen_var_rgb(qoip_working_t *q);
 
 /*Init q, used internally by qoip_encode and qoipcrunch_encode_* */
 void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_desc *desc);
@@ -557,17 +558,20 @@ static int qoip_expand_opcodes(int *op_cnt, qoip_opcode_t *ops, qoip_working_t *
 }
 
 static inline void qoip_encode_run(qoip_working_t *q) {
-	for(; q->run>=q->run2_len; q->run-=q->run2_len) {
-		q->out[q->p++] = q->run2_opcode;
-		q->out[q->p++] = 255;
+	if(q->run) {
+		size_t quot = q->run/q->run2_len, rem = q->run%q->run2_len, i;
+		for(i=0;i<quot;++i) {
+			q->out[q->p++] = q->run2_opcode;
+			q->out[q->p++] = 255;
+		}
+		if(rem>q->run1_len) {
+			q->out[q->p++] = q->run2_opcode;
+			q->out[q->p++] = (rem - 1) - q->run1_len;
+		}
+		else if(rem)
+			q->out[q->p++] = q->run1_opcode + (rem - 1);
+		q->run = 0;
 	}
-	if(q->run>q->run1_len) {
-		q->out[q->p++] = q->run2_opcode;
-		q->out[q->p++] = (q->run - 1) - q->run1_len;
-	}
-	else if(q->run)
-		q->out[q->p++] = q->run1_opcode + (q->run - 1);
-	q->run = 0;
 }
 
 int qoip_ret(int ret, FILE *io, char *s) {
@@ -743,10 +747,11 @@ typedef struct {
 	int (*dec)(qoip_working_t*, size_t);
 } qoip_fastpath_t;
 
-int qoip_fastpath_cnt = 1;
+int qoip_fastpath_cnt = 2;
 /*Refactor from opstring to bytestring ids when fixing as opstr has been removed*/
 static const qoip_fastpath_t qoip_fastpath[] = {
 	{{9, OP_LUMA1_232B, OP_LUMA2_464, OP_INDEX5, OP_LUMA3_676, OP_INDEX10, OP_LUMA4_6866, OP_LUMA2_2322, OP_LUMA3_4544, OP_A}, qoip_encode_effort0, NULL},
+	{{5, OP_LUMA1_232, OP_LUMA2_454, OP_LUMA2_3433, OP_LUMA3_5655, OP_LUMA3_676}, qoip_encode_fast1, NULL},
 };
 
 static inline int qoip_fastpath_match(u8 *key, const qoip_fastpath_t *fast) {

@@ -588,8 +588,8 @@ void benchmark_directory(opt_t *opt, char *effort, const char *path, benchmark_r
 int optmode_license(opt_t *opt) {
 	printf("The MIT License(MIT)\n");
 	printf("\n");
-	printf("Copyright 2021 Dominic Szablewski (original QOI format)\n");
-	printf("Copyright 2021 Matthew Ling (adaptations for QOIP format)\n");
+	printf("Copyright 2021 Dominic Szablewski (QOI format)\n");
+	printf("Copyright 2021 Matthew Ling (QOIP format)\n");
 	printf("\n");
 	printf("Permission is hereby granted, free of charge, to any person obtaining a copy of\n");
 	printf("this software and associated documentation files(the \"Software\"), to deal in\n");
@@ -611,7 +611,7 @@ int optmode_license(opt_t *opt) {
 
 int main(int argc, char **argv) {
 	opt_t opt;
-	char effort_level[2];
+	char effort_level[32];
 
 	/* Process args */
 	opt_init(&opt);

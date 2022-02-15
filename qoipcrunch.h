@@ -32,7 +32,9 @@ extern "C" {
 #endif
 
 /* Test every op as an indidual combination */
-char *qoipcrunch_test = ",a0,c0,e0,00,20,40,60,80,42,22,23,02,26,03,e2,e3,c2,a2,84,65,43,24,04,e5,c4,a4,85,66,44,27,05,e4,c3,a3,82,62,45,25,e6,c5,a5,83,63,46,28,06,e7,c6,a6,86,64,47";
+char *qoipcrunch_test = ",a0,c0,e0,00,20,40,60,80,42,22,23,02,26,03,e2,e3,c2,"
+	"a2,84,65,43,24,04,e5,c4,a4,85,66,44,27,05,e4,c3,a3,82,62,45,25,e6,c5,a5,83,"
+	"63,46,28,06,e7,c6,a6,86,64,47";
 
 /*Controller, parses options and calls appropriate crunch function */
 int qoipcrunch_encode        (const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, void *scratch, int threads, int entropy);
@@ -56,7 +58,9 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 #define QOIP_MAX_THREADS 64
 
 static int qoip_effortlevel(char *effort) {
-	if(     strcmp(effort, "0")==0 || !effort)
+	if(     strcmp(effort, "-1")==0 || !effort)
+		return -1;
+	else if(strcmp(effort, "0")==0 || !effort)
 		return 0;
 	else if(strcmp(effort, "1")==0)
 		return 1;
@@ -70,7 +74,7 @@ static int qoip_effortlevel(char *effort) {
 		return 5;
 	else if(strcmp(effort, "6")==0)
 		return 6;
-	return -1;
+	return -2;
 }
 
 /* Scratch is assumed big enough to house all working memory encodings, aka
@@ -79,8 +83,10 @@ threads * qoip_maxsize(desc)
 
 int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, void *tmp, int threads, int entropy) {
 	int level = qoip_effortlevel(effort);
-	if(level==-1)     /*Custom string*/
+	if(level==-2)     /*Custom string*/
 		return qoipcrunch_encode_custom(data, desc, out, out_len, effort, tmp, threads, entropy);
+	else if(level==-1) /*Escape hatch to use fast1 combination*/
+		return qoip_encode(data, desc, out, out_len, "0343444682", entropy, tmp);
 	else if(level==0) /*Escape hatch to use best (known, on average) combination*/
 		return qoip_encode(data, desc, out, out_len, "02244082a0a6c4c5e2", entropy, tmp);
 	else              /*Search orders of magnitude more combinations with log tables, level 0..5*/

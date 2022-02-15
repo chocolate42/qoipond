@@ -14,7 +14,7 @@
 		"type": "int",
 		"description": "Combination preset 0-6, higher tries more combinations, default 1.",
 		"int": 1,
-		"min": 0,
+		"min": -1,
 		"max": 6,
 	},
 	{

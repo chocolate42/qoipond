@@ -34,8 +34,8 @@ SOFTWARE.
 int optmode_license(opt_t *opt) {
 	printf("The MIT License(MIT)\n");
 	printf("\n");
-	printf("Copyright 2021 Dominic Szablewski (original QOI format)\n");
-	printf("Copyright 2021 Matthew Ling (adaptations for QOIP format)\n");
+	printf("Copyright 2021 Dominic Szablewski (QOI format)\n");
+	printf("Copyright 2021 Matthew Ling (QOIP format)\n");
 	printf("\n");
 	printf("Permission is hereby granted, free of charge, to any person obtaining a copy of\n");
 	printf("this software and associated documentation files(the \"Software\"), to deal in\n");
@@ -69,14 +69,14 @@ int main(int argc, char *argv[]) {
 	qoip_desc desc;
 	unsigned char *raw, *tmp, *scratch;
 	size_t tmp_len, max_size, raw_size;
-	char effort_str[2];
+	char effort_level[32];
 
 	/* Process args */
 	opt_init(&opt);
 	opt_process(&opt, argc, argv);
 	if(opt_dispatch(&opt))
 		return 1;
-	sprintf(effort_str, "%d", opt.effort);
+	sprintf(effort_level, "%d", opt.effort);
 
 	if(opt.in==NULL) {
 		optmode_help(&opt);
@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
 
 	qoip_decode(opt.in, opt.in_len, &desc, desc.channels, raw, scratch);
 
-	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_str, scratch, opt.threads, opt.entropy))
+	if(qoipcrunch_encode(raw, &desc, tmp, &tmp_len, opt.custom?opt.custom:effort_level, scratch, opt.threads, opt.entropy))
 		return 1;
 
 	if(opt.out) {
