@@ -163,9 +163,6 @@ is its size in bytes. opcode_string defines the opcode combination to use. It is
 to the caller to ensure this string is valid */
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, const char *opcode_string, const int entropy, void *scratch);
 
-/* Generate v* and avg_* variables, used in many encode functions */
-void qoip_gen_var_rgb(qoip_working_t *restrict q);
-
 /*Init q, used internally by qoip_encode and qoipcrunch_encode_* */
 void qoip_init_working_memory(qoip_working_t *restrict q, const void *data, const qoip_desc *desc);
 
@@ -199,6 +196,7 @@ int qoip_ret(const int ret, FILE *io, const char *s);
 /* Print details from a QOIP file */
 int qoip_stat(const void *encoded, FILE *io);
 
+inline void qoip_gen_var_rgb(qoip_working_t *restrict q);
 
 /* Parse an ascii char as a hex value, return -1 on failure */
 int qoip_valid_hex(u8 chr);
@@ -617,8 +615,10 @@ static int qoip_dic_load() {
 		io = fopen("dictionary", "rb");
 		if(!io)
 			return qoip_ret(1, stdout, "qoip_entropy: Failed to open dictionary\n");
-		if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt)
+		if(fread(qoip_dic, 1, qoip_dic_cnt, io)!=qoip_dic_cnt) {
+			fclose(io);
 			return qoip_ret(2, stdout, "qoip_entropy: Failed to load dictionary\n");
+		}
 		fclose(io);
 		qoip_dic_loaded=1;
 	}
@@ -740,6 +740,24 @@ int qoip_stat(const void *encoded, FILE *io) {
 	return 0;
 }
 
+inline void qoip_gen_var_rgb(qoip_working_t *restrict q) {
+	if (q->px_w<8192) {
+		q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0]+1) >> 1;
+		q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1]+1) >> 1;
+		q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2]+1) >> 1;
+	}
+	else
+		q->px_ref.v = q->px_prev.v;
+	q->vr = q->px.rgba.r - q->px_prev.rgba.r;
+	q->vg = q->px.rgba.g - q->px_prev.rgba.g;
+	q->vb = q->px.rgba.b - q->px_prev.rgba.b;
+	q->avg_r = q->px.rgba.r - q->px_ref.rgba.r;
+	q->avg_g = q->px.rgba.g - q->px_ref.rgba.g;
+	q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
+	q->avg_gr = q->avg_r - q->avg_g;
+	q->avg_gb = q->avg_b - q->avg_g;
+}
+
 /* fastpath definitions */
 #include "qoip-fast.c"
 typedef struct {
@@ -771,24 +789,6 @@ static inline int qoip_fastpath_find(const u8 *key) {
 			return i;
 	}
 	return -1;
-}
-
-inline void qoip_gen_var_rgb(qoip_working_t *restrict q) {
-	if (q->px_w<8192) {
-		q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0]+1) >> 1;
-		q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1]+1) >> 1;
-		q->px_ref.rgba.b = (q->px_prev.rgba.b + q->upcache[(q->px_w * 3) + 2]+1) >> 1;
-	}
-	else
-		q->px_ref.v = q->px_prev.v;
-	q->vr = q->px.rgba.r - q->px_prev.rgba.r;
-	q->vg = q->px.rgba.g - q->px_prev.rgba.g;
-	q->vb = q->px.rgba.b - q->px_prev.rgba.b;
-	q->avg_r = q->px.rgba.r - q->px_ref.rgba.r;
-	q->avg_g = q->px.rgba.g - q->px_ref.rgba.g;
-	q->avg_b = q->px.rgba.b - q->px_ref.rgba.b;
-	q->avg_gr = q->avg_r - q->avg_g;
-	q->avg_gb = q->avg_b - q->avg_g;
 }
 
 static inline void qoip_encode_inner(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
