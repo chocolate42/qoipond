@@ -24,6 +24,8 @@ SOFTWARE.
 * Footer needs to be written by the encode functions
 */
 
+enum{QOIP_MASK_1=0x80, QOIP_MASK_2=0xc0, QOIP_MASK_3=0xe0, QOIP_MASK_4=0xf0, QOIP_MASK_5=0xf8, QOIP_MASK_6=0xfc, QOIP_MASK_7=0xfe};
+
 /* -effort 0 */
 enum{E0_LUMA1_232B=0x00, E0_LUMA2_464=0x80, E0_INDEX5=0xc0, E0_LUMA3_676=0xe0, E0_INDEX10=0xe8, E0_LUMA4_6866=0xec, E0_LUMA2_2322=0xf0, E0_LUMA3_4544=0xf2, E0_A=0xf4, E0_RGB=0xf5, E0_RGBA=0xf6, E0_RUN2=0xf7, E0_RUN1=0xf8};
 
@@ -375,17 +377,6 @@ int qoip_encode_fast1(qoip_working_t *q, size_t *out_len, void *scratch, int ent
 	return 0;
 }
 
-u8 decode_lut_fast1[256] = {
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-	2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
-	3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
-	4,4,4,4,4,4,4,4,5,6,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
-};
-
 static inline void qoip_decode_fast1_inner(qoip_working_t *q) {
 	int b1, b2, b3, vg;
 	if (q->run > 0)
@@ -400,33 +391,29 @@ static inline void qoip_decode_fast1_inner(qoip_working_t *q) {
 		else
 			q->px_ref.v = q->px_prev.v;
 
-		switch(decode_lut_fast1[q->in[q->p]]) {
-			case 0:
-				b1 = q->in[q->p++];
+		b1 = q->in[q->p++];
+		if(      (b1 & QOIP_MASK_1) == FAST1_LUMA1_232 ) {
 				vg = ((b1 >> 4) & 7) - 4;
 				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b1 >> 2) & 3) - 2;
 				q->px.rgba.g = q->px_ref.rgba.g + vg;
 				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b1 >> 0) & 3) - 2;
-				break;
-			case 1:
-				b1 = q->in[q->p++];
+		}
+		else if( (b1 & QOIP_MASK_3) == FAST1_LUMA2_454 ) {
 				b2 = q->in[q->p++];
 				vg = ((b1 >> 0) & 31) - 16;
 				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
 				q->px.rgba.g = q->px_ref.rgba.g + vg;
 				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
-				break;
-			case 2:
-				b1 = q->in[q->p++];
+		}
+		else if( (b1 & QOIP_MASK_3) == FAST1_LUMA2_3433 ) {
 				b2 = q->in[q->p++];
 				vg = ((b1 >> 1) & 15) - 8;
 				q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 1) << 2) | (b2 >> 6)) - 4;
 				q->px.rgba.g = q->px_ref.rgba.g + vg;
 				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 3) & 7) - 4;
 				q->px.rgba.a += ((b2 & 7) - 4);
-				break;
-			case 3:
-				b1 = q->in[q->p++];
+		}
+		else if( (b1 & QOIP_MASK_3) == FAST1_LUMA3_5655 ) {
 				b2 = q->in[q->p++];
 				b3 = q->in[q->p++];
 				vg = (((b1 & 31) << 1) | (b2 >> 7)) - 32;
@@ -434,37 +421,30 @@ static inline void qoip_decode_fast1_inner(qoip_working_t *q) {
 				q->px.rgba.g = q->px_ref.rgba.g + vg;
 				q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
 				q->px.rgba.a += ((b3 & 31) - 16);
-				break;
-			case 4:
-				b1 = q->in[q->p++];
+		}
+		else if( (b1 & QOIP_MASK_5) == FAST1_LUMA3_676 ) {
 				b2 = q->in[q->p++];
 				b3 = q->in[q->p++];
 				vg = (((b1 & 7) << 4) | (b2 >> 4)) - 64;
 				q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
 				q->px.rgba.g = q->px_ref.rgba.g + vg;
 				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
-				break;
-			case 5:
-				++q->p;
+		}
+		else if( b1 == FAST1_RGB ) {
 				q->px.rgba.r = q->in[q->p++];
 				q->px.rgba.g = q->in[q->p++];
 				q->px.rgba.b = q->in[q->p++];
-				break;
-			case 6:
-				++q->p;
+		}
+		else if( b1 == FAST1_RGBA ) {
 				q->px.rgba.r = q->in[q->p++];
 				q->px.rgba.g = q->in[q->p++];
 				q->px.rgba.b = q->in[q->p++];
 				q->px.rgba.a = q->in[q->p++];
-				break;
-			case 7:
-				++q->p;
-				q->run = q->in[q->p++] + 21;
-				break;
-			case 8:
-				q->run = q->in[q->p++] - 0xeb;
-				break;
 		}
+		else if( b1 == FAST1_RUN2 )
+				q->run = q->in[q->p++] + 21;
+		else
+				q->run = b1 - FAST1_RUN1;
 	}
 	if(q->px_w<8192) {
 		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
