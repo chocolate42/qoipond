@@ -130,7 +130,7 @@ typedef union {
 
 /* Working state of an encode/decode run, exposed for smart crunch function */
 typedef struct {
-	size_t bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
+	size_t in_tot, bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
 	int channels, hash, run, run1_len, run2_len, index1_maxval, index2_maxval;
 	unsigned char *out, upcache[8192*3];
 	const unsigned char *in;
@@ -744,17 +744,17 @@ int qoip_stat(const void *encoded, FILE *io) {
 typedef struct {
 	u8 opstr[16];
 	int (*enc)(qoip_working_t*, size_t*, void*, int);
-	int (*dec)(qoip_working_t*, size_t);
+	int (*dec)(qoip_working_t*);
 } qoip_fastpath_t;
 
 int qoip_fastpath_cnt = 2;
 /*Refactor from opstring to bytestring ids when fixing as opstr has been removed*/
 static const qoip_fastpath_t qoip_fastpath[] = {
 	{{9, OP_LUMA1_232B, OP_LUMA2_464, OP_INDEX5, OP_LUMA3_676, OP_INDEX10, OP_LUMA4_6866, OP_LUMA2_2322, OP_LUMA3_4544, OP_A}, qoip_encode_effort0, NULL},
-	{{5, OP_LUMA1_232, OP_LUMA2_454, OP_LUMA2_3433, OP_LUMA3_5655, OP_LUMA3_676}, qoip_encode_fast1, NULL},
+	{{5, OP_LUMA1_232, OP_LUMA2_454, OP_LUMA2_3433, OP_LUMA3_5655, OP_LUMA3_676}, qoip_encode_fast1, qoip_decode_fast1},
 };
 
-static inline int qoip_fastpath_match(u8 *key, const qoip_fastpath_t *fast) {
+static inline int qoip_fastpath_match(const u8 *key, const qoip_fastpath_t *fast) {
 	int i;
 	for (i=0;i<=key[0];++i) {
 		if (key[i]!=fast->opstr[i])
@@ -763,7 +763,7 @@ static inline int qoip_fastpath_match(u8 *key, const qoip_fastpath_t *fast) {
 	return 0;
 }
 
-static inline int qoip_fastpath_find(u8 *key) {
+static inline int qoip_fastpath_find(const u8 *key) {
 	int i;
 	for (i=0;i<qoip_fastpath_cnt;++i) {
 		if (qoip_fastpath_match(key, qoip_fastpath + i) == 0)
@@ -913,11 +913,11 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	return 0;
 }
 
-static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_opcode_t *op, int op_cnt) {
+static inline void qoip_decode_inner(qoip_working_t *q, qoip_opcode_t *op, int op_cnt) {
 	int i;
 	if (q->run > 0)
 		--q->run;
-	else if (q->p < data_len) {
+	else if (q->p < q->in_tot) {
 		q->px_prev.v = q->px.v;
 		if (q->px_pos >= q->stride && q->px_w<8192) {
 			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
@@ -965,7 +965,7 @@ static inline void qoip_decode_inner(qoip_working_t *q, size_t data_len, qoip_op
 
 int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels, void *out, void *scratch) {
 	char opstr[513] = {0};
-	int i, op_cnt, ret;
+	int fast, i, op_cnt, ret;
 	qoip_working_t qq = {0};
 	qoip_working_t *q = &qq;
 	qoip_opcode_t ops[OP_END];
@@ -1020,14 +1020,16 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	q->stride = desc->width * q->channels;
 	q->px.v = 0;
 	q->px.rgba.a = 255;
-
-	/* Fastpath TODO */
-
+	q->in_tot = desc->entropy?desc->raw_cnt:data_len;
 	q->px_pos = 0;
+
+	if ((fast=qoip_fastpath_find(q->in+25))!=-1 && qoip_fastpath[fast].dec)
+		return qoip_fastpath[fast].dec(q);
+
 	if(q->channels==4) {
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
 			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
-				qoip_decode_inner(q, desc->entropy?desc->raw_cnt:data_len, ops, op_cnt);
+				qoip_decode_inner(q, ops, op_cnt);
 				*(qoip_rgba_t*)(q->out + q->px_pos) = q->px;
 				q->px_pos += 4;
 			}
@@ -1036,7 +1038,7 @@ int qoip_decode(const void *data, size_t data_len, qoip_desc *desc, int channels
 	else {
 		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
 			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
-				qoip_decode_inner(q, desc->entropy?desc->raw_cnt:data_len, ops, op_cnt);
+				qoip_decode_inner(q, ops, op_cnt);
 				q->out[q->px_pos + 0] = q->px.rgba.r;
 				q->out[q->px_pos + 1] = q->px.rgba.g;
 				q->out[q->px_pos + 2] = q->px.rgba.b;

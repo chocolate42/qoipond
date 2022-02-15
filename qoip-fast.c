@@ -374,3 +374,125 @@ int qoip_encode_fast1(qoip_working_t *q, size_t *out_len, void *scratch, int ent
 		qoip_entropy(q->out, out_len, scratch, entropy);
 	return 0;
 }
+
+u8 decode_lut_fast1[256] = {
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+	2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
+	3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,
+	4,4,4,4,4,4,4,4,5,6,7,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,
+};
+
+static inline void qoip_decode_fast1_inner(qoip_working_t *q) {
+	int b1, b2, b3, vg;
+	if (q->run > 0)
+		--q->run;
+	else if (q->p < q->in_tot) {
+		q->px_prev.v = q->px.v;
+		if (q->px_pos >= q->stride && q->px_w<8192) {
+			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
+			q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
+			q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
+		}
+		else
+			q->px_ref.v = q->px_prev.v;
+
+		switch(decode_lut_fast1[q->in[q->p]]) {
+			case 0:
+				b1 = q->in[q->p++];
+				vg = ((b1 >> 4) & 7) - 4;
+				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b1 >> 2) & 3) - 2;
+				q->px.rgba.g = q->px_ref.rgba.g + vg;
+				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b1 >> 0) & 3) - 2;
+				break;
+			case 1:
+				b1 = q->in[q->p++];
+				b2 = q->in[q->p++];
+				vg = ((b1 >> 0) & 31) - 16;
+				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 4) & 15) - 8;
+				q->px.rgba.g = q->px_ref.rgba.g + vg;
+				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 0) & 15) - 8;
+				break;
+			case 2:
+				b1 = q->in[q->p++];
+				b2 = q->in[q->p++];
+				vg = ((b1 >> 1) & 15) - 8;
+				q->px.rgba.r = q->px_ref.rgba.r + vg + (((b1 & 1) << 2) | (b2 >> 6)) - 4;
+				q->px.rgba.g = q->px_ref.rgba.g + vg;
+				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b2 >> 3) & 7) - 4;
+				q->px.rgba.a += ((b2 & 7) - 4);
+				break;
+			case 3:
+				b1 = q->in[q->p++];
+				b2 = q->in[q->p++];
+				b3 = q->in[q->p++];
+				vg = (((b1 & 31) << 1) | (b2 >> 7)) - 32;
+				q->px.rgba.r = q->px_ref.rgba.r + vg + ((b2 >> 2) & 31) - 16;
+				q->px.rgba.g = q->px_ref.rgba.g + vg;
+				q->px.rgba.b = q->px_ref.rgba.b + vg + (((b2 & 3) << 3) | (b3 >> 5)) - 16;
+				q->px.rgba.a += ((b3 & 31) - 16);
+				break;
+			case 4:
+				b1 = q->in[q->p++];
+				b2 = q->in[q->p++];
+				b3 = q->in[q->p++];
+				vg = (((b1 & 7) << 4) | (b2 >> 4)) - 64;
+				q->px.rgba.r = q->px_ref.rgba.r + vg + (((b2 & 15) << 2) | (b3 >> 6)) - 32;
+				q->px.rgba.g = q->px_ref.rgba.g + vg;
+				q->px.rgba.b = q->px_ref.rgba.b + vg + ((b3 >> 0) & 63) - 32;
+				break;
+			case 5:
+				++q->p;
+				q->px.rgba.r = q->in[q->p++];
+				q->px.rgba.g = q->in[q->p++];
+				q->px.rgba.b = q->in[q->p++];
+				break;
+			case 6:
+				++q->p;
+				q->px.rgba.r = q->in[q->p++];
+				q->px.rgba.g = q->in[q->p++];
+				q->px.rgba.b = q->in[q->p++];
+				q->px.rgba.a = q->in[q->p++];
+				break;
+			case 7:
+				++q->p;
+				q->run = q->in[q->p++] + 21;
+				break;
+			case 8:
+				q->run = q->in[q->p++] - 0xeb;
+				break;
+		}
+	}
+	if(q->px_w<8192) {
+		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
+		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
+		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
+	}
+}
+
+int qoip_decode_fast1(qoip_working_t *q) {
+	if(q->channels==4) {
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				qoip_decode_fast1_inner(q);
+				*(qoip_rgba_t*)(q->out + q->px_pos) = q->px;
+				q->px_pos += 4;
+			}
+		}
+	}
+	else {
+		for(q->px_h=0;q->px_h<q->height;++q->px_h) {
+			for(q->px_w=0;q->px_w<q->width;++q->px_w) {
+				qoip_decode_fast1_inner(q);
+				q->out[q->px_pos + 0] = q->px.rgba.r;
+				q->out[q->px_pos + 1] = q->px.rgba.g;
+				q->out[q->px_pos + 2] = q->px.rgba.b;
+				q->px_pos += 3;
+			}
+		}
+	}
+	return 0;
+}
