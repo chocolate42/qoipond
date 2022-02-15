@@ -132,8 +132,8 @@ typedef union {
 typedef struct {
 	size_t in_tot, bitstream_loc, p, px_pos, px_w, px_h, width, height, stride;
 	int channels, hash, run, run1_len, run2_len, index1_maxval, index2_maxval;
-	unsigned char *out, upcache[8192*3];
-	const unsigned char *in;
+	unsigned char *restrict out, upcache[8192*3];
+	const unsigned char *restrict in;
 	qoip_rgba_t index[128], index2[1024], px, px_prev, px_ref;
 	i8 vr, vg, vb, va;/*Difference from previous */
 	i8 avg_r, avg_g, avg_b, avg_gr, avg_gb;/* Difference from average */
@@ -143,9 +143,9 @@ typedef struct {
 /* Master opcode definitions */
 typedef struct {
 	u8 id, set;
-	char *desc;
-	int (*enc)(qoip_working_t *, u8);
-	void (*dec)(qoip_working_t *);
+	char *restrict desc;
+	int (*enc)(qoip_working_t *restrict, u8);
+	void (*dec)(qoip_working_t *restrict);
 } opdef_t;
 
 /* Defines which set an op belongs to. Order matters, do not alter */
@@ -164,10 +164,10 @@ to the caller to ensure this string is valid */
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, const char *opcode_string, const int entropy, void *scratch);
 
 /* Generate v* and avg_* variables, used in many encode functions */
-void qoip_gen_var_rgb(qoip_working_t *q);
+void qoip_gen_var_rgb(qoip_working_t *restrict q);
 
 /*Init q, used internally by qoip_encode and qoipcrunch_encode_* */
-void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_desc *desc);
+void qoip_init_working_memory(qoip_working_t *restrict q, const void *data, const qoip_desc *desc);
 
 /* Return the maximum size of a no-entropy-coding QOIP image with dimensions in desc */
 size_t qoip_maxsize(const qoip_desc *desc);
@@ -179,7 +179,7 @@ size_t qoip_maxsize_raw(const qoip_desc *desc, int channels);
 size_t qoip_maxentropysize(size_t src, int entropy);
 
 /* Bolted-on entropy coding, exposed so qoipcrunch_encode can use it */
-static int qoip_entropy(void *out, size_t *out_len, void *tmp, int entropy);
+static int qoip_entropy(void *out, size_t *out_len, void *tmp, const int entropy);
 
 /* Populate desc by reading a QOIP header. If loc is NULL, read from
 bytes + 0, otherwise read from bytes + *loc. Advance loc if present.
@@ -217,8 +217,8 @@ const opdef_t* qoip_op_lookup(u8 id);
 /* Runtime opcodes built from master definitions */
 typedef struct {
 	u8 id, mask, set, opcode, opcnt;
-	int (*enc)(qoip_working_t *, u8);
-	void (*dec)(qoip_working_t *);
+	int (*enc)(qoip_working_t *restrict, u8);
+	void (*dec)(qoip_working_t *restrict);
 } qoip_opcode_t;
 
 /* Op encode/decode functions split into qoip-func.c, new_op functions go there */
@@ -294,12 +294,12 @@ void qoip_print_op(const opdef_t *op, FILE *io) {
 	fprintf(io, "%s, id=%02x\n", op->desc, op->id);
 }
 
-static inline void qoip_memcpy(void *d, void *s, const size_t len) {
+static inline void qoip_memcpy(void *restrict d, void *restrict s, const size_t len) {
 	size_t i;
 	for(i=0;i<len;++i)
 		((char*)d)[i]=((char*)s)[i];
 }
-static inline void qoip_opcode_swap(qoip_opcode_t *a, qoip_opcode_t *b) {
+static inline void qoip_opcode_swap(qoip_opcode_t *restrict a, qoip_opcode_t *restrict b) {
 	qoip_opcode_t t;
 	qoip_memcpy(&t, a, sizeof(qoip_opcode_t));
 	qoip_memcpy(a, b, sizeof(qoip_opcode_t));
@@ -557,7 +557,7 @@ static int qoip_expand_opcodes(const int *op_cnt, qoip_opcode_t *ops, qoip_worki
 	return 0;
 }
 
-static inline void qoip_encode_run(qoip_working_t *q) {
+static inline void qoip_encode_run(qoip_working_t *restrict q) {
 	if(q->run) {
 		const size_t quot = q->run/q->run2_len, rem = q->run%q->run2_len;
 		size_t i;
@@ -580,7 +580,7 @@ int qoip_ret(const int ret, FILE *io, const char *s) {
 	return ret;
 }
 
-static void qoip_finish(qoip_working_t *q) {
+static void qoip_finish(qoip_working_t *restrict q) {
 	/* Pad footer to 8 byte alignment with minimum 8 bytes of padding */
 	for(;q->p%8;)
 		q->out[q->p++] = 0;
@@ -773,7 +773,7 @@ static inline int qoip_fastpath_find(const u8 *key) {
 	return -1;
 }
 
-inline void qoip_gen_var_rgb(qoip_working_t *q) {
+inline void qoip_gen_var_rgb(qoip_working_t *restrict q) {
 	if (q->px_w<8192) {
 		q->px_ref.rgba.r = (q->px_prev.rgba.r + q->upcache[(q->px_w * 3) + 0]+1) >> 1;
 		q->px_ref.rgba.g = (q->px_prev.rgba.g + q->upcache[(q->px_w * 3) + 1]+1) >> 1;
@@ -791,7 +791,7 @@ inline void qoip_gen_var_rgb(qoip_working_t *q) {
 	q->avg_gb = q->avg_b - q->avg_g;
 }
 
-static inline void qoip_encode_inner(qoip_working_t *q, const qoip_opcode_t *op, const int op_cnt) {
+static inline void qoip_encode_inner(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
 	int i;
 	if (q->px.v == q->px_prev.v)
 		++q->run;/* Accumulate as much RLE as there is */
@@ -830,7 +830,7 @@ static inline void qoip_encode_inner(qoip_working_t *q, const qoip_opcode_t *op,
 	q->index2[q->hash & q->index2_maxval] = q->px;
 }
 
-void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_desc *desc) {
+void qoip_init_working_memory(qoip_working_t *restrict q, const void *data, const qoip_desc *desc) {
 	int i;
 	q->in = (const unsigned char *)data;
 	q->px.v = 0;
@@ -853,7 +853,7 @@ void qoip_init_working_memory(qoip_working_t *q, const void *data, const qoip_de
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, const char *opstring, const int entropy, void *scratch) {
 	int fast, op_cnt = 0;
 	qoip_working_t qq = {0};
-	qoip_working_t *q = &qq;
+	qoip_working_t *restrict q = &qq;
 	qoip_opcode_t ops[OP_END];
 	q->out = (unsigned char *)out;
 	qoip_init_working_memory(q, data, desc);
@@ -914,7 +914,7 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	return 0;
 }
 
-static inline void qoip_decode_inner(qoip_working_t *q, const qoip_opcode_t *op, const int op_cnt) {
+static inline void qoip_decode_inner(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
 	int i;
 	if (q->run > 0)
 		--q->run;
@@ -968,7 +968,7 @@ int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const 
 	char opstr[513] = {0};
 	int fast, i, op_cnt, ret;
 	qoip_working_t qq = {0};
-	qoip_working_t *q = &qq;
+	qoip_working_t *restrict q = &qq;
 	qoip_opcode_t ops[OP_END];
 
 	q->in = (const unsigned char *)data;
