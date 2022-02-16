@@ -813,164 +813,57 @@ void qoip_init_working_memory(qoip_working_t *restrict q, const void *data, cons
 	}
 }
 
-/*Inner code for split generic paths, one path for each indexing configuration*/
-
-/*Generic path with no indexing*/
-static inline void qoip_encode_inner_nn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->px.v == q->px_prev.v)
-		++q->run;/* Accumulate as much RLE as there is */
-	else {
-		qoip_encode_run(q);
-		/* generate variables that may be needed by ops */
-		qoip_gen_var_rgb(q);
-		q->va = q->px.rgba.a - q->px_prev.rgba.a;
-		/* Test every op until we find one that handles the pixel */
-		for(i=0;i<op_cnt;++i){
-			if(op[i].enc(q, op[i].opcode))
-				break;
-		}
-		if(i==op_cnt) {
-			if(q->va==0) {
-				q->out[q->p++] = q->rgb_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-			}
-			else {
-				q->out[q->p++] = q->rgba_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-				q->out[q->p++] = q->px.rgba.a;
-			}
-		}
+/* Pick which generic path to take*/
+static inline int qoip_generic_path_index(const qoip_opcode_t *op, const int op_cnt) {
+	int i, ret=0;
+	for(i=0;i<op_cnt;++i) {
+		if(op[i].set==QOIP_SET_INDEX1 && QOIP_IS_HASH_INDEX(op[i].id))
+			ret += 1;
+		if(op[i].set==QOIP_SET_INDEX2 && QOIP_IS_HASH_INDEX(op[i].id))
+			ret += 2;
 	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
+	return ret;
 }
 
-/*Generic path with hash indexing for 1 byte indexes*/
-static inline void qoip_encode_inner_nh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->px.v == q->px_prev.v)
-		++q->run;/* Accumulate as much RLE as there is */
-	else {
-		qoip_encode_run(q);
-		/* generate variables that may be needed by ops */
-		q->hash = QOIP_COLOR_HASH(q->px);
-		qoip_gen_var_rgb(q);
-		q->va = q->px.rgba.a - q->px_prev.rgba.a;
-		/* Test every op until we find one that handles the pixel */
-		for(i=0;i<op_cnt;++i){
-			if(op[i].enc(q, op[i].opcode))
-				break;
-		}
-		if(i==op_cnt) {
-			if(q->va==0) {
-				q->out[q->p++] = q->rgb_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-			}
-			else {
-				q->out[q->p++] = q->rgba_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-				q->out[q->p++] = q->px.rgba.a;
-			}
-		}
-	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
-}
-
-/*Generic path with hash indexing for 2 byte indexes*/
-static inline void qoip_encode_inner_hn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->px.v == q->px_prev.v)
-		++q->run;/* Accumulate as much RLE as there is */
-	else {
-		qoip_encode_run(q);
-		/* generate variables that may be needed by ops */
-		q->hash = QOIP_COLOR_HASH(q->px);
-		qoip_gen_var_rgb(q);
-		q->va = q->px.rgba.a - q->px_prev.rgba.a;
-		/* Test every op until we find one that handles the pixel */
-		for(i=0;i<op_cnt;++i){
-			if(op[i].enc(q, op[i].opcode))
-				break;
-		}
-		if(i==op_cnt) {
-			if(q->va==0) {
-				q->out[q->p++] = q->rgb_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-			}
-			else {
-				q->out[q->p++] = q->rgba_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-				q->out[q->p++] = q->px.rgba.a;
-			}
-		}
-	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
-	q->index2[q->hash & q->index2_maxval] = q->px;
-}
-
-/*Generic path with hash indexing for 1 and 2 byte indexes*/
-static inline void qoip_encode_inner_hh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->px.v == q->px_prev.v)
-		++q->run;/* Accumulate as much RLE as there is */
-	else {
-		qoip_encode_run(q);
-		/* generate variables that may be needed by ops */
-		q->hash = QOIP_COLOR_HASH(q->px);
-		qoip_gen_var_rgb(q);
-		q->va = q->px.rgba.a - q->px_prev.rgba.a;
-		/* Test every op until we find one that handles the pixel */
-		for(i=0;i<op_cnt;++i){
-			if(op[i].enc(q, op[i].opcode))
-				break;
-		}
-		if(i==op_cnt) {
-			if(q->va==0) {
-				q->out[q->p++] = q->rgb_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-			}
-			else {
-				q->out[q->p++] = q->rgba_opcode;
-				q->out[q->p++] = q->px.rgba.r;
-				q->out[q->p++] = q->px.rgba.g;
-				q->out[q->p++] = q->px.rgba.b;
-				q->out[q->p++] = q->px.rgba.a;
-			}
-		}
-	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
-	q->index2[q->hash & q->index2_maxval] = q->px;
-}
+#define QOIP_ENCODE_INNER(aaa, bbb)             \
+	do {                                          \
+		int i;                                      \
+		if (q->px.v == q->px_prev.v)                \
+			++q->run;                                 \
+		else {                                      \
+			qoip_encode_run(q);                       \
+			if((aaa)==1 || (bbb)==1)                  \
+				q->hash = QOIP_COLOR_HASH(q->px);       \
+			qoip_gen_var_rgb(q);                      \
+			q->va = q->px.rgba.a - q->px_prev.rgba.a; \
+			for(i=0;i<op_cnt;++i){                    \
+				if(op[i].enc(q, op[i].opcode))          \
+					break;                                \
+			}                                         \
+			if(i==op_cnt) {                           \
+				if(q->va==0) {                          \
+					q->out[q->p++] = q->rgb_opcode;       \
+					q->out[q->p++] = q->px.rgba.r;        \
+					q->out[q->p++] = q->px.rgba.g;        \
+					q->out[q->p++] = q->px.rgba.b;        \
+				}                                       \
+				else {                                  \
+					q->out[q->p++] = q->rgba_opcode;      \
+					q->out[q->p++] = q->px.rgba.r;        \
+					q->out[q->p++] = q->px.rgba.g;        \
+					q->out[q->p++] = q->px.rgba.b;        \
+					q->out[q->p++] = q->px.rgba.a;        \
+				}                                       \
+			}                                         \
+		}                                           \
+		if(q->px_w<8192) {                          \
+			q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r; \
+			q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g; \
+			q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b; \
+		}                                           \
+		if((aaa)==1)                                \
+			q->index2[q->hash & q->index2_maxval] = q->px; \
+	} while (0)
 
 #define QOIP_ENCODE_LOOP(inner)                         \
 	do {                                                  \
@@ -998,38 +891,11 @@ static inline void qoip_encode_inner_hh(qoip_working_t *restrict q, const qoip_o
 		}                                                   \
 	} while (0)
 
-/* Hoisted function pointers to allow for compiler optimisation*/
-static void qoip_encode_nn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_ENCODE_LOOP(qoip_encode_inner_nn(q, op, op_cnt));
-}
-static void qoip_encode_nh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_ENCODE_LOOP(qoip_encode_inner_nh(q, op, op_cnt));
-}
-static void qoip_encode_hn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_ENCODE_LOOP(qoip_encode_inner_hn(q, op, op_cnt));
-}
-static void qoip_encode_hh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_ENCODE_LOOP(qoip_encode_inner_hh(q, op, op_cnt));
-}
-
-/* Pick which generic path to take*/
-static inline int qoip_generic_path_index(const qoip_opcode_t *op, const int op_cnt) {
-	int i, ret=0;
-	for(i=0;i<op_cnt;++i) {
-		if(op[i].set==QOIP_SET_INDEX1 && QOIP_IS_HASH_INDEX(op[i].id))
-			ret += 1;
-		if(op[i].set==QOIP_SET_INDEX2 && QOIP_IS_HASH_INDEX(op[i].id))
-			ret += 2;
-	}
-	return ret;
-}
-
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, const char *opstring, const int entropy, void *scratch) {
 	int fast, op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *restrict q = &qq;
-	qoip_opcode_t ops[OP_END];
-	void (*generic_path[4])(qoip_working_t *restrict, const qoip_opcode_t *, const int) = {qoip_encode_nn, qoip_encode_nh, qoip_encode_hn, qoip_encode_hh};
+	qoip_opcode_t op[OP_END];
 	int generic_path_choice = 0;
 	q->out = (unsigned char *)out;
 	qoip_init_working_memory(q, data, desc);
@@ -1045,12 +911,12 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 
 	if(opstring == NULL || *opstring==0)
 		opstring = "02244082a0a6c4c5e2";
-	if(parse_opstring(opstring, ops, &op_cnt))
+	if(parse_opstring(opstring, op, &op_cnt))
 		return qoip_ret(14, stderr, "qoip_encode: Failed to parse opstring");
-	if(qoip_expand_opcodes(&op_cnt, ops, q))
+	if(qoip_expand_opcodes(&op_cnt, op, q))
 		return qoip_ret(15, stderr, "qoip_encode: Failed to expand opstring");
 	qoip_write_file_header(q->out, &(q->p), desc);
-	qoip_write_bitstream_header(q->out, &q->p, desc, ops, op_cnt);
+	qoip_write_bitstream_header(q->out, &q->p, desc, op, op_cnt);
 	q->bitstream_loc = q->p;
 	q->px_pos = 0;
 
@@ -1058,11 +924,18 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		return qoip_fastpath[fast].enc(q, out_len, scratch, entropy);
 
 	/* Sort ops into order they should be tested on encode */
-	qoip_sort_set(ops, op_cnt);
+	qoip_sort_set(op, op_cnt);
 
 	/* Determine correct generic path and take it */
-	generic_path_choice = qoip_generic_path_index(ops, op_cnt);
-	generic_path[generic_path_choice](q, ops, op_cnt);
+	generic_path_choice = qoip_generic_path_index(op, op_cnt);
+	if(generic_path_choice==0)
+		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(0, 0));
+	else if(generic_path_choice==1)
+		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(0, 1));
+	else if(generic_path_choice==2)
+		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(1, 0));
+	else if(generic_path_choice==3)
+		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(1, 1));
 
 	qoip_encode_run(q);/* Cap off ending run if present*/
 	qoip_finish(q);
@@ -1073,201 +946,58 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 	return 0;
 }
 
-static inline void qoip_decode_inner_nn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->run > 0)
-		--q->run;
-	else if (q->p < q->in_tot) {
-		q->px_prev.v = q->px.v;
-		if (q->px_pos >= q->stride && q->px_w<8192) {
-			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
-			q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
-			q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
-		}
-		else
-			q->px_ref.v = q->px_prev.v;
-		if(q->in[q->p]==q->run2_opcode) {
-			++q->p;
-			q->run = q->in[q->p++] + q->run1_len;
-		}
-		else if(q->in[q->p]>q->run2_opcode)
-			q->run = q->in[q->p++] - q->run1_opcode;
-		else if(q->in[q->p]==q->rgb_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-		}
-		else if(q->in[q->p]==q->rgba_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-			q->px.rgba.a = q->in[q->p++];
-		}
-		else {
-			for(i=0;i<op_cnt;++i) {
-				if ((q->in[q->p] & op[i].mask) == op[i].opcode) {
-					op[i].dec(q);
-					break;
-				}
-			}
-		}
-	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
-}
-
-static inline void qoip_decode_inner_nh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->run > 0)
-		--q->run;
-	else if (q->p < q->in_tot) {
-		q->px_prev.v = q->px.v;
-		if (q->px_pos >= q->stride && q->px_w<8192) {
-			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
-			q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
-			q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
-		}
-		else
-			q->px_ref.v = q->px_prev.v;
-		if(q->in[q->p]==q->run2_opcode) {
-			++q->p;
-			q->run = q->in[q->p++] + q->run1_len;
-		}
-		else if(q->in[q->p]>q->run2_opcode)
-			q->run = q->in[q->p++] - q->run1_opcode;
-		else if(q->in[q->p]==q->rgb_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-		}
-		else if(q->in[q->p]==q->rgba_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-			q->px.rgba.a = q->in[q->p++];
-		}
-		else {
-			for(i=0;i<op_cnt;++i) {
-				if ((q->in[q->p] & op[i].mask) == op[i].opcode) {
-					op[i].dec(q);
-					break;
-				}
-			}
-		}
-		q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px;
-	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
-}
-
-static inline void qoip_decode_inner_hn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->run > 0)
-		--q->run;
-	else if (q->p < q->in_tot) {
-		q->px_prev.v = q->px.v;
-		if (q->px_pos >= q->stride && q->px_w<8192) {
-			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
-			q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
-			q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
-		}
-		else
-			q->px_ref.v = q->px_prev.v;
-		if(q->in[q->p]==q->run2_opcode) {
-			++q->p;
-			q->run = q->in[q->p++] + q->run1_len;
-		}
-		else if(q->in[q->p]>q->run2_opcode)
-			q->run = q->in[q->p++] - q->run1_opcode;
-		else if(q->in[q->p]==q->rgb_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-		}
-		else if(q->in[q->p]==q->rgba_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-			q->px.rgba.a = q->in[q->p++];
-		}
-		else {
-			for(i=0;i<op_cnt;++i) {
-				if ((q->in[q->p] & op[i].mask) == op[i].opcode) {
-					op[i].dec(q);
-					break;
-				}
-			}
-		}
-		q->index2[QOIP_COLOR_HASH(q->px) & q->index2_maxval] = q->px;
-	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
-}
-
-static inline void qoip_decode_inner_hh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	int i;
-	if (q->run > 0)
-		--q->run;
-	else if (q->p < q->in_tot) {
-		q->px_prev.v = q->px.v;
-		if (q->px_pos >= q->stride && q->px_w<8192) {
-			q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1;
-			q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1;
-			q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1;
-		}
-		else
-			q->px_ref.v = q->px_prev.v;
-		if(q->in[q->p]==q->run2_opcode) {
-			++q->p;
-			q->run = q->in[q->p++] + q->run1_len;
-		}
-		else if(q->in[q->p]>q->run2_opcode)
-			q->run = q->in[q->p++] - q->run1_opcode;
-		else if(q->in[q->p]==q->rgb_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-		}
-		else if(q->in[q->p]==q->rgba_opcode) {
-			++q->p;
-			q->px.rgba.r = q->in[q->p++];
-			q->px.rgba.g = q->in[q->p++];
-			q->px.rgba.b = q->in[q->p++];
-			q->px.rgba.a = q->in[q->p++];
-		}
-		else {
-			for(i=0;i<op_cnt;++i) {
-				if ((q->in[q->p] & op[i].mask) == op[i].opcode) {
-					op[i].dec(q);
-					break;
-				}
-			}
-		}
-		q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px;
-		q->index2[QOIP_COLOR_HASH(q->px) & q->index2_maxval] = q->px;
-	}
-	if(q->px_w<8192) {
-		q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r;
-		q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g;
-		q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b;
-	}
-}
+#define QOIP_DECODE_INNER(aaa, bbb)                 \
+	do {                                              \
+		int i;                                          \
+		if (q->run > 0)                                 \
+			--q->run;                                     \
+		else if (q->p < q->in_tot) {                    \
+			q->px_prev.v = q->px.v;                       \
+			if (q->px_pos >= q->stride && q->px_w<8192) { \
+				q->px_ref.rgba.r = (q->px.rgba.r + q->upcache[(q->px_w * 3) + 0] + 1) >> 1; \
+				q->px_ref.rgba.g = (q->px.rgba.g + q->upcache[(q->px_w * 3) + 1] + 1) >> 1; \
+				q->px_ref.rgba.b = (q->px.rgba.b + q->upcache[(q->px_w * 3) + 2] + 1) >> 1; \
+			}                                             \
+			else                                          \
+				q->px_ref.v = q->px_prev.v;                 \
+			if(q->in[q->p]==q->run2_opcode) {             \
+				++q->p;                                     \
+				q->run = q->in[q->p++] + q->run1_len;       \
+			}                                             \
+			else if(q->in[q->p]>q->run2_opcode)           \
+				q->run = q->in[q->p++] - q->run1_opcode;    \
+			else if(q->in[q->p]==q->rgb_opcode) {         \
+				++q->p;                                     \
+				q->px.rgba.r = q->in[q->p++];               \
+				q->px.rgba.g = q->in[q->p++];               \
+				q->px.rgba.b = q->in[q->p++];               \
+			}                                             \
+			else if(q->in[q->p]==q->rgba_opcode) {        \
+				++q->p;                                     \
+				q->px.rgba.r = q->in[q->p++];               \
+				q->px.rgba.g = q->in[q->p++];               \
+				q->px.rgba.b = q->in[q->p++];               \
+				q->px.rgba.a = q->in[q->p++];               \
+			}                                             \
+			else {                                        \
+				for(i=0;i<op_cnt;++i) {                     \
+					if ((q->in[q->p] & op[i].mask) == op[i].opcode) { \
+						op[i].dec(q);                           \
+						break;                                  \
+					}                                         \
+				}                                           \
+			}                                             \
+			if((bbb)==1)                                  \
+				q->index[QOIP_COLOR_HASH(q->px)  & q->index1_maxval] = q->px; \
+			if((aaa)==1)                                  \
+				q->index2[QOIP_COLOR_HASH(q->px) & q->index2_maxval] = q->px; \
+		}                                               \
+		if(q->px_w<8192) {                              \
+			q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r; \
+			q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g; \
+			q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b; \
+		}                                               \
+	} while (0)
 
 #define QOIP_DECODE_LOOP(inner)                         \
 	do {                                                  \
@@ -1293,27 +1023,12 @@ static inline void qoip_decode_inner_hh(qoip_working_t *restrict q, const qoip_o
 		}                                                   \
 	} while (0)
 
-/* Hoisted function pointers to allow for compiler optimisation*/
-static void qoip_decode_nn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_DECODE_LOOP(qoip_decode_inner_nn(q, op, op_cnt));
-}
-static void qoip_decode_nh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_DECODE_LOOP(qoip_decode_inner_nh(q, op, op_cnt));
-}
-static void qoip_decode_hn(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_DECODE_LOOP(qoip_decode_inner_hn(q, op, op_cnt));
-}
-static void qoip_decode_hh(qoip_working_t *restrict q, const qoip_opcode_t *op, const int op_cnt) {
-	QOIP_DECODE_LOOP(qoip_decode_inner_hh(q, op, op_cnt));
-}
-
 int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const int channels, void *out, void *scratch) {
 	char opstr[513] = {0};
 	int fast, i, op_cnt, ret;
 	qoip_working_t qq = {0};
 	qoip_working_t *restrict q = &qq;
-	qoip_opcode_t ops[OP_END];
-	void (*generic_path[4])(qoip_working_t *restrict, const qoip_opcode_t *, const int) = {qoip_decode_nn, qoip_decode_nh, qoip_decode_hn, qoip_decode_hh};
+	qoip_opcode_t op[OP_END];
 	int generic_path_choice = 0;
 
 	q->in = (const unsigned char *)data;
@@ -1328,11 +1043,11 @@ int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const 
 
 	if(qoip_read_file_header(q->in, &(q->p), desc))
 		return qoip_ret(17, stderr, "qoip_decode: Failed to read file header");
-	if(qoip_read_bitstream_header(q->in, &(q->p), desc, ops, &op_cnt))
+	if(qoip_read_bitstream_header(q->in, &(q->p), desc, op, &op_cnt))
 		return qoip_ret(18, stderr, "qoip_decode: Failed to read bitstream header");
 	for(i=0;i<op_cnt;++i)
-		sprintf(opstr+(2*i), "%02x", ops[i].id);
-	if(qoip_expand_opcodes(&op_cnt, ops, q))
+		sprintf(opstr+(2*i), "%02x", op[i].id);
+	if(qoip_expand_opcodes(&op_cnt, op, q))
 		return qoip_ret(19, stderr, "qoip_decode: Failed to expand opstring");
 
 	if(desc->entropy) {
@@ -1373,8 +1088,15 @@ int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const 
 		return qoip_fastpath[fast].dec(q);
 
 	/* Determine correct generic path and take it */
-	generic_path_choice = qoip_generic_path_index(ops, op_cnt);
-	generic_path[generic_path_choice](q, ops, op_cnt);
+	generic_path_choice = qoip_generic_path_index(op, op_cnt);
+	if(generic_path_choice==0)
+		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(0, 0));
+	else if(generic_path_choice==1)
+		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(0, 1));
+	else if(generic_path_choice==2)
+		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(1, 0));
+	else if(generic_path_choice==3)
+		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(1, 1));
 
 	return 0;
 }
