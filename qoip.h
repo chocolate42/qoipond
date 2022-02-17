@@ -64,6 +64,12 @@ Implementing new ops tl;dr:
   that will also need updating
 */
 
+#ifdef DEB
+#include "coz.h"
+#else
+#define COZ_PROGRESS
+#endif
+
 #ifndef QOIP_H
 #define QOIP_H
 
@@ -211,21 +217,46 @@ const opdef_t* qoip_op_lookup(u8 id);
 
 #ifdef QOIP_C
 #include <stdio.h>
+#include <stdlib.h>
 #include "lz4.h"
 #include "zstd.h"
 
 /* Runtime opcodes built from master definitions */
 typedef struct {
 	u8 id, mask, set, opcode, opcnt;
+	int order;
+	size_t freq;
 	int (*enc)(qoip_working_t *restrict, u8);
 	void (*dec)(qoip_working_t *restrict);
 } qoip_opcode_t;
+
+int opcode_comp_freq(const void *aa, const void *bb) {
+	qoip_opcode_t *a = (qoip_opcode_t*)aa;
+	qoip_opcode_t *b = (qoip_opcode_t*)bb;
+	if(a->freq>b->freq)
+		return -1;
+	else if(a->freq<b->freq)
+		return 1;
+	else if (a->id == b->id)
+		return 0;
+	else
+		return a->id<b->id ? -1: 1;
+}
+
+int opcode_comp_id(const void *aa, const void *bb) {
+	qoip_opcode_t *a = (qoip_opcode_t*)aa;
+	qoip_opcode_t *b = (qoip_opcode_t*)bb;
+	if (a->id == b->id)
+		return 0;
+	else
+		return a->id<b->id ? -1: 1;
+}
 
 /* Op encode/decode functions split into qoip-func.c, new_op functions go there */
 #include "qoip-func.c"
 
 /* new_op definitions go here, if qoip_op_lookup remains linear order doesn't matter */
-int qoip_ops_cnt = 52;
+int qoip_ops_cnt = 57;
 const opdef_t qoip_ops[] = {
 	{OP_INDEX10,   QOIP_SET_INDEX2, "OP_INDEX10:    2 byte, 1024 value index cache                                               ", qoip_enc_index10, qoip_dec_index10},
 	{OP_INDEX9,    QOIP_SET_INDEX2, "OP_INDEX9:     2 byte,  512 value index cache                                               ", qoip_enc_index9, qoip_dec_index9},
@@ -235,6 +266,11 @@ const opdef_t qoip_ops[] = {
 	{OP_INDEX5,    QOIP_SET_INDEX1, "OP_INDEX5:     1 byte,   32 value index cache                                               ", qoip_enc_index, qoip_dec_index},
 	{OP_INDEX4,    QOIP_SET_INDEX1, "OP_INDEX4:     1 byte,   16 value index cache                                               ", qoip_enc_index, qoip_dec_index},
 	{OP_INDEX3,    QOIP_SET_INDEX1, "OP_INDEX3:     1 byte,    8 value index cache                                               ", qoip_enc_index, qoip_dec_index},
+	{OP_INDEX7F,   QOIP_SET_INDEX1, "OP_INDEX7F:    1 byte,  128 value FIFO index cache                                          ", qoip_enc_indexf, qoip_dec_indexf},
+	{OP_INDEX6F,   QOIP_SET_INDEX1, "OP_INDEX6F:    1 byte,   64 value FIFO index cache                                          ", qoip_enc_indexf, qoip_dec_indexf},
+	{OP_INDEX5F,   QOIP_SET_INDEX1, "OP_INDEX5F:    1 byte,   32 value FIFO index cache                                          ", qoip_enc_indexf, qoip_dec_indexf},
+	{OP_INDEX4F,   QOIP_SET_INDEX1, "OP_INDEX4F:    1 byte,   16 value FIFO index cache                                          ", qoip_enc_indexf, qoip_dec_indexf},
+	{OP_INDEX3F,   QOIP_SET_INDEX1, "OP_INDEX3F:    1 byte,    8 value FIFO index cache                                          ", qoip_enc_indexf, qoip_dec_indexf},
 	{OP_DELTA,     QOIP_SET_LEN1,   "OP_DELTA:      1 byte delta, ( avg_r  - 1.. 1, avg_g  - 1.. 1, avg_b  - 1.. 1, a        0 ), AND\n"
                                   "                             ( r            0, g            0, b            0, va - 2.. 2 )", qoip_enc_delta, qoip_dec_delta},
 	{OP_DELTAA,    QOIP_SET_LEN1,   "OP_DELTAA:     1 byte delta, ( avg_r  - 1.. 1, avg_g  - 1.. 1, avg_b  - 1.. 1, va -1 OR 1 ), AND\n"
@@ -384,8 +420,10 @@ int qoip_read_bitstream_header(const unsigned char *bytes, size_t *p, qoip_desc 
 	if(op_cnt)
 		*op_cnt = cnt;
 	if(ops) {
-		for(i=0; i<cnt; ++i)
+		for(i=0; i<cnt; ++i) {
 			ops[i].id = bytes[loc++];
+			ops[i].order = i;
+		}
 	}
 	else
 		loc+=cnt;
@@ -813,86 +851,96 @@ void qoip_init_working_memory(qoip_working_t *restrict q, const void *data, cons
 	}
 }
 
-/* Pick which generic path to take*/
+/* Pick which generic path to take
+	* %3 indicates 1 byte indexing: 0=none, 1=hash, 2=FIFO
+	* /3 indicates 2 byte indexing: 0=none, 1=hash, 2=FIFO*/
 static inline int qoip_generic_path_index(const qoip_opcode_t *op, const int op_cnt) {
 	int i, ret=0;
 	for(i=0;i<op_cnt;++i) {
 		if(op[i].set==QOIP_SET_INDEX1 && QOIP_IS_HASH_INDEX(op[i].id))
 			ret += 1;
-		if(op[i].set==QOIP_SET_INDEX2 && QOIP_IS_HASH_INDEX(op[i].id))
+		if(op[i].set==QOIP_SET_INDEX1 && QOIP_IS_FIFO_INDEX(op[i].id))
 			ret += 2;
+		if(op[i].set==QOIP_SET_INDEX2 && QOIP_IS_HASH_INDEX(op[i].id))
+			ret += 3;
+		if(op[i].set==QOIP_SET_INDEX2 && QOIP_IS_FIFO_INDEX(op[i].id))
+			ret += 6;
 	}
 	return ret;
 }
 
-#define QOIP_ENCODE_INNER(aaa, bbb)             \
-	do {                                          \
-		int i;                                      \
-		if (q->px.v == q->px_prev.v)                \
-			++q->run;                                 \
-		else {                                      \
-			qoip_encode_run(q);                       \
-			if((aaa)==1 || (bbb)==1)                  \
-				q->hash = QOIP_COLOR_HASH(q->px);       \
-			qoip_gen_var_rgb(q);                      \
-			q->va = q->px.rgba.a - q->px_prev.rgba.a; \
-			for(i=0;i<op_cnt;++i){                    \
-				if(op[i].enc(q, op[i].opcode))          \
-					break;                                \
-			}                                         \
-			if(i==op_cnt) {                           \
-				if(q->va==0) {                          \
-					q->out[q->p++] = q->rgb_opcode;       \
-					q->out[q->p++] = q->px.rgba.r;        \
-					q->out[q->p++] = q->px.rgba.g;        \
-					q->out[q->p++] = q->px.rgba.b;        \
-				}                                       \
-				else {                                  \
-					q->out[q->p++] = q->rgba_opcode;      \
-					q->out[q->p++] = q->px.rgba.r;        \
-					q->out[q->p++] = q->px.rgba.g;        \
-					q->out[q->p++] = q->px.rgba.b;        \
-					q->out[q->p++] = q->px.rgba.a;        \
-				}                                       \
-			}                                         \
-		}                                           \
-		if(q->px_w<8192) {                          \
+#define QOIP_ENCODE_INNER(aaa, bbb)                 \
+	do {                                              \
+		int i;                                          \
+		if (q->px.v == q->px_prev.v)                    \
+			++q->run;                                     \
+		else {                                          \
+			qoip_encode_run(q);                           \
+			if((aaa)==1 || (bbb)==1)                      \
+				q->hash = QOIP_COLOR_HASH(q->px);           \
+			qoip_gen_var_rgb(q);                          \
+			q->va = q->px.rgba.a - q->px_prev.rgba.a;     \
+			for(i=0;i<op_cnt;++i){                        \
+				if(op[i].enc(q, op[i].opcode)) {            \
+					op[i].freq++;                             \
+					break;                                    \
+				}                                           \
+			}                                             \
+			if(i==op_cnt) {                               \
+				if(q->va==0) {                              \
+					q->out[q->p++] = q->rgb_opcode;           \
+					q->out[q->p++] = q->px.rgba.r;            \
+					q->out[q->p++] = q->px.rgba.g;            \
+					q->out[q->p++] = q->px.rgba.b;            \
+				}                                           \
+				else {                                      \
+					q->out[q->p++] = q->rgba_opcode;          \
+					q->out[q->p++] = q->px.rgba.r;            \
+					q->out[q->p++] = q->px.rgba.g;            \
+					q->out[q->p++] = q->px.rgba.b;            \
+					q->out[q->p++] = q->px.rgba.a;            \
+				}                                           \
+			}                                             \
+		}                                               \
+		if(q->px_w<8192) {                              \
 			q->upcache[(q->px_w * 3) + 0] = q->px.rgba.r; \
 			q->upcache[(q->px_w * 3) + 1] = q->px.rgba.g; \
 			q->upcache[(q->px_w * 3) + 2] = q->px.rgba.b; \
-		}                                           \
-		if((aaa)==1)                                \
+		}                                               \
+		if((aaa)==1)                                    \
 			q->index2[q->hash & q->index2_maxval] = q->px; \
 	} while (0)
 
-#define QOIP_ENCODE_LOOP(inner)                         \
-	do {                                                  \
-		if(q->channels==4) {                                \
-			for(q->px_h=0;q->px_h<q->height;++q->px_h) {      \
-				for(q->px_w=0;q->px_w<q->width;++q->px_w) {     \
-					q->px_prev.v = q->px.v;                       \
-					q->px = *(qoip_rgba_t *)(q->in + q->px_pos);  \
-					inner;                                        \
-					q->px_pos +=4;                                \
-				}                                               \
-			}                                                 \
-		}                                                   \
-		else {                                              \
-			for(q->px_h=0;q->px_h<q->height;++q->px_h) {      \
-				for(q->px_w=0;q->px_w<q->width;++q->px_w) {     \
-					q->px_prev.v = q->px.v;                       \
-					q->px.rgba.r = q->in[q->px_pos + 0];          \
-					q->px.rgba.g = q->in[q->px_pos + 1];          \
-					q->px.rgba.b = q->in[q->px_pos + 2];          \
-					inner;                                        \
-					q->px_pos +=3;                                \
-				}                                               \
-			}                                                 \
-		}                                                   \
+#define QOIP_ENCODE_LOOP(inner)                     \
+	do {                                              \
+		if(q->channels==4) {                            \
+			for(q->px_h=0;q->px_h<q->height;++q->px_h) {  \
+				COZ_PROGRESS                                \
+				for(q->px_w=0;q->px_w<q->width;++q->px_w) { \
+					q->px_prev.v = q->px.v;                   \
+					q->px = *(qoip_rgba_t *)(q->in + q->px_pos); \
+					inner;                                    \
+					q->px_pos +=4;                            \
+				}                                           \
+			}                                             \
+		}                                               \
+		else {                                          \
+			for(q->px_h=0;q->px_h<q->height;++q->px_h) {  \
+				COZ_PROGRESS                                \
+				for(q->px_w=0;q->px_w<q->width;++q->px_w) { \
+					q->px_prev.v = q->px.v;                   \
+					q->px.rgba.r = q->in[q->px_pos + 0];      \
+					q->px.rgba.g = q->in[q->px_pos + 1];      \
+					q->px.rgba.b = q->in[q->px_pos + 2];      \
+					inner;                                    \
+					q->px_pos +=3;                            \
+				}                                           \
+			}                                             \
+		}                                               \
 	} while (0)
 
 int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, const char *opstring, const int entropy, void *scratch) {
-	int fast, op_cnt = 0;
+	int fast, i, op_cnt = 0;
 	qoip_working_t qq = {0};
 	qoip_working_t *restrict q = &qq;
 	qoip_opcode_t op[OP_END];
@@ -932,14 +980,22 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(0, 0));
 	else if(generic_path_choice==1)
 		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(0, 1));
-	else if(generic_path_choice==2)
-		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(1, 0));
 	else if(generic_path_choice==3)
+		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(1, 0));
+	else if(generic_path_choice==4)
 		QOIP_ENCODE_LOOP(QOIP_ENCODE_INNER(1, 1));
 
 	qoip_encode_run(q);/* Cap off ending run if present*/
 	qoip_finish(q);
 	*out_len = q->p;
+
+	/*Sort ops into frequency order for quicker generic decode*/
+	/*A streaming encoder would skip this as it requires modifying the header*/
+	qsort(op, op_cnt, sizeof(qoip_opcode_t), opcode_comp_freq);
+	for(i=0;i<op_cnt;++i){
+		//printf("old %02x new %02x\n", q->out[26+i], op[i].id);
+		q->out[26+i] = op[i].id;
+	}
 
 	if(entropy)
 		qoip_entropy(out, out_len, scratch, entropy);
@@ -999,33 +1055,34 @@ int qoip_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_
 		}                                               \
 	} while (0)
 
-#define QOIP_DECODE_LOOP(inner)                         \
-	do {                                                  \
-		if(q->channels==4) {                                \
-			for(q->px_h=0;q->px_h<q->height;++q->px_h) {      \
-				for(q->px_w=0;q->px_w<q->width;++q->px_w) {     \
-				inner;                                          \
-				*(qoip_rgba_t*)(q->out + q->px_pos) = q->px;    \
-				q->px_pos += 4;                                 \
-				}                                               \
-			}                                                 \
-		}                                                   \
-		else {                                              \
-			for(q->px_h=0;q->px_h<q->height;++q->px_h) {      \
-				for(q->px_w=0;q->px_w<q->width;++q->px_w) {     \
-				inner;                                          \
-				q->out[q->px_pos + 0] = q->px.rgba.r;           \
-				q->out[q->px_pos + 1] = q->px.rgba.g;           \
-				q->out[q->px_pos + 2] = q->px.rgba.b;           \
-				q->px_pos += 3;                                 \
-				}                                               \
-			}                                                 \
-		}                                                   \
+#define QOIP_DECODE_LOOP(inner)                     \
+	do {                                              \
+		if(q->channels==4) {                            \
+			for(q->px_h=0;q->px_h<q->height;++q->px_h) {  \
+				COZ_PROGRESS                                \
+				for(q->px_w=0;q->px_w<q->width;++q->px_w) { \
+				inner;                                      \
+				*(qoip_rgba_t*)(q->out + q->px_pos) = q->px; \
+				q->px_pos += 4;                             \
+				}                                           \
+			}                                             \
+		}                                               \
+		else {                                          \
+			for(q->px_h=0;q->px_h<q->height;++q->px_h) {  \
+				COZ_PROGRESS                                \
+				for(q->px_w=0;q->px_w<q->width;++q->px_w) { \
+				inner;                                      \
+				q->out[q->px_pos + 0] = q->px.rgba.r;       \
+				q->out[q->px_pos + 1] = q->px.rgba.g;       \
+				q->out[q->px_pos + 2] = q->px.rgba.b;       \
+				q->px_pos += 3;                             \
+				}                                           \
+			}                                             \
+		}                                               \
 	} while (0)
 
 int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const int channels, void *out, void *scratch) {
-	char opstr[513] = {0};
-	int fast, i, op_cnt, ret;
+	int fast, i, j, op_cnt, ret;
 	qoip_working_t qq = {0};
 	qoip_working_t *restrict q = &qq;
 	qoip_opcode_t op[OP_END];
@@ -1045,10 +1102,23 @@ int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const 
 		return qoip_ret(17, stderr, "qoip_decode: Failed to read file header");
 	if(qoip_read_bitstream_header(q->in, &(q->p), desc, op, &op_cnt))
 		return qoip_ret(18, stderr, "qoip_decode: Failed to read bitstream header");
-	for(i=0;i<op_cnt;++i)
-		sprintf(opstr+(2*i), "%02x", op[i].id);
+	/*Id order for opcode expansion*/
+	qsort(op, op_cnt, sizeof(qoip_opcode_t), opcode_comp_id);
 	if(qoip_expand_opcodes(&op_cnt, op, q))
 		return qoip_ret(19, stderr, "qoip_decode: Failed to expand opstring");
+	/*Decode order*/
+	for(i=0;i<op_cnt;++i) {
+		if(op[i].order!=i) {
+			for(j=i+1;j<op_cnt;++j) {
+				if(op[j].order==i){
+					qoip_opcode_swap(op+i, op+j);
+					break;
+				}
+			}
+			if(j==op_cnt)
+				return qoip_ret(19, stderr, "qoip_decode: Failed to order opcodes");
+		}
+	}
 
 	if(desc->entropy) {
 		if(!scratch)
@@ -1093,9 +1163,9 @@ int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const 
 		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(0, 0));
 	else if(generic_path_choice==1)
 		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(0, 1));
-	else if(generic_path_choice==2)
-		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(1, 0));
 	else if(generic_path_choice==3)
+		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(1, 0));
+	else if(generic_path_choice==4)
 		QOIP_DECODE_LOOP(QOIP_DECODE_INNER(1, 1));
 
 	return 0;
