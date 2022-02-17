@@ -41,10 +41,20 @@ void qoip_dec_index(qoip_working_t *q) {
 	q->px = q->index[q->in[q->p++] & q->index1_maxval];
 }
 
+int qoip_enc_indexf(qoip_working_t *q, u8 opcode) {
+	if (q->index[q->hash_pos[q->hash & (QOIP_FIFO_HASH_SIZE - 1)] & q->index1_maxval].v == q->px.v) {
+		q->out[q->p++] = opcode | (q->hash_pos[q->hash & (QOIP_FIFO_HASH_SIZE - 1)] & q->index1_maxval);
+		return 1;
+	}
+	q->hash_pos[q->hash & (QOIP_FIFO_HASH_SIZE - 1)] = q->index_wpos;
+	q->index[q->index_wpos++ & q->index1_maxval] = q->px;
+	return 0;
+}
+
 int qoip_enc_index8(qoip_working_t *q, u8 opcode) {
 	if (q->index2[q->hash & 255].v == q->px.v) {
 		q->out[q->p++] = opcode;
-		q->out[q->p++] = q->hash;
+		q->out[q->p++] = q->hash & 255;
 		return 1;
 	}
 	return 0;
