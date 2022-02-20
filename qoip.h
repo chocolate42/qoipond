@@ -1168,19 +1168,6 @@ int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const 
 	qsort(op, op_cnt, sizeof(qoip_opcode_t), opcode_comp_id);
 	if(qoip_expand_opcodes(&op_cnt, op, q))
 		return qoip_ret(19, stderr, "qoip_decode: Failed to expand opstring");
-	/*Decode order*/
-	for(i=0;i<op_cnt;++i) {
-		if(op[i].order!=i) {
-			for(j=i+1;j<op_cnt;++j) {
-				if(op[j].order==i){
-					qoip_opcode_swap(op+i, op+j);
-					break;
-				}
-			}
-			if(j==op_cnt)
-				return qoip_ret(19, stderr, "qoip_decode: Failed to order opcodes");
-		}
-	}
 
 	if(desc->entropy) {
 		if(!scratch)
@@ -1218,6 +1205,20 @@ int qoip_decode(const void *data, const size_t data_len, qoip_desc *desc, const 
 
 	if ((fast=qoip_fastpath_find(q->in+25))!=-1 && qoip_fastpath[fast].dec)
 		return qoip_fastpath[fast].dec(q);
+
+	/*Decode order for generic path*/
+	for(i=0;i<op_cnt;++i) {
+		if(op[i].order!=i) {
+			for(j=i+1;j<op_cnt;++j) {
+				if(op[j].order==i){
+					qoip_opcode_swap(op+i, op+j);
+					break;
+				}
+			}
+			if(j==op_cnt)
+				return qoip_ret(19, stderr, "qoip_decode: Failed to order opcodes");
+		}
+	}
 
 	/* Determine correct generic path and take it */
 	generic_path_choice = qoip_generic_path_index(op, op_cnt);

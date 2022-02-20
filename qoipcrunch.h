@@ -309,7 +309,7 @@ int op_log_lookup[256]={
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 };
 
-enum {STATOP_INDEX1_CNT=10, STATOP_RGB1_CNT=5, STATOP_RGBA1_CNT=2, STATOP_INDEX2_CNT=3};
+enum {STATOP_INDEX1_CNT=5, STATOP_RGB1_CNT=5, STATOP_RGBA1_CNT=2, STATOP_INDEX2_CNT=3};
 #define STATOP_CNT_MAX (STATOP_INDEX1_CNT*STATOP_RGB1_CNT*STATOP_RGBA1_CNT*STATOP_INDEX2_CNT)
 #define LOGSTAT_INDEX_RGBA(a, b, c, d) (((a)*STATOP_INDEX1_CNT*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((b)*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((c)*STATOP_INDEX2_CNT)+(d))
 #define LOGSTAT_INDEX_RGB(b, c, d)                                                               (((b)*STATOP_RGB1_CNT*STATOP_INDEX2_CNT)+((c)*STATOP_INDEX2_CNT)+(d))
@@ -325,13 +325,12 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	qoip_working_t *q = &qq;
 	/*index1/2 constants*/
 	qoip_rgba_t index3[8]={0}, index4[16]={0}, index5[32]={0}, index6[64]={0}, index7[128]={0}, index8[256]={0}, index9[512]={0}, index10[1024]={0};
-	qoip_rgba_t index3f[8]={0}, index4f[16]={0}, index5f[32]={0}, index6f[64]={0}, index7f[128]={0};
-	qoip_rgba_t *indexes1[10] = {index6, index5, index7, index4, index3, index6f, index5f, index7f, index4f, index3f}, *indexes2[3] = {index10, index9, index8};
+	qoip_rgba_t *indexes1[5] = {index6, index5, index7, index4, index3}, *indexes2[3] = {index10, index9, index8};
 	const u8 statop_index2[] = {OP_INDEX10, OP_INDEX9, OP_INDEX8};
-	const u8 statop_index1[] = {OP_INDEX6, OP_INDEX5, OP_INDEX7, OP_INDEX4, OP_INDEX3, OP_INDEX6F, OP_INDEX5F, OP_INDEX7F, OP_INDEX4F, OP_INDEX3F};
-	const int index1_mask[10] = {63, 31, 127, 15, 7, 63, 31, 127, 15, 7}, index2_mask[3] = {1023, 511, 255};
+	u8 statop_index1[] = {OP_INDEX6,  OP_INDEX5,  OP_INDEX7,  OP_INDEX4,  OP_INDEX3};
+	const int index1_mask[5] = {63, 31, 127, 15, 7}, index2_mask[3] = {1023, 511, 255};
 	int hashpos3[QOIP_FIFO_HASH_SIZE]={0}, hashpos4[QOIP_FIFO_HASH_SIZE]={0}, hashpos5[QOIP_FIFO_HASH_SIZE]={0}, hashpos6[QOIP_FIFO_HASH_SIZE]={0}, hashpos7[QOIP_FIFO_HASH_SIZE]={0};
-	int wpos[10]={0}, *hashpos[10] = {NULL, NULL, NULL, NULL, NULL, hashpos6, hashpos5, hashpos7, hashpos4, hashpos3 };
+	int wpos[5]={0}, *hashpos[5] = {hashpos6, hashpos5, hashpos7, hashpos4, hashpos3 };
 	/*rgb1 constants*/
 	const u8 statop_rgb1[] = {OP_LUMA1_232B, OP_DIFF1_222, OP_DELTA, OP_LUMA1_232, OP_LUMA1_222};
 	int (*sim_delta1[]) (qoip_working_t *) = {qoip_sim_luma1_232b, qoip_sim_diff1_222, qoip_sim_delta, qoip_sim_luma1_232, qoip_sim_luma1_222};
@@ -350,20 +349,20 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	/*To guarantee that RGB input fed in as 3/4 channel is handled the same,
 	rgb_cnts has to mirror the equivalent values in rgba_cnts*/
 	int rgb_cnts[] = {
-		 2, 2,    1, 2,    2,/*level 0*/
-		 3, 4,    1, 4,    2,/*level 1*/
-		 5, 4,    2, 5,    4,/*level 2*/
-		 5, 4,    2, 6,    5,/*level 3*/
-		 5, 5,    3, 7,    6,/*level 4*/
-		10, 5,    3, 8,    7,/*level 5*/
+		2, 2,    1, 2,    2,/*level 0*/
+		3, 4,    1, 4,    2,/*level 1*/
+		5, 4,    2, 5,    4,/*level 2*/
+		5, 4,    2, 6,    5,/*level 3*/
+		5, 5,    3, 7,    6,/*level 4*/
+		5, 5,    3, 8,    7,/*level 5*/
 	};
 	int rgba_cnts[] = {
-		 2, 2, 2, 1, 2, 1, 2, 2, 2,/*level 0*/
-		 3, 4, 2, 1, 4, 4, 2, 4, 4,/*level 1*/
-		 5, 4, 2, 2, 5, 5, 4, 6, 5,/*level 2*/
-		 5, 4, 2, 2, 6, 6, 5, 7, 6,/*level 3*/
-		 5, 5, 2, 3, 7, 7, 6, 8, 7,/*level 4*/
-		10, 5, 2, 3, 8, 8, 7, 9, 7,/*level 5*/
+		2, 2, 2, 1, 2, 1, 2, 2, 2,/*level 0*/
+		3, 4, 2, 1, 4, 4, 2, 4, 4,/*level 1*/
+		5, 4, 2, 2, 5, 5, 4, 6, 5,/*level 2*/
+		5, 4, 2, 2, 6, 6, 5, 7, 6,/*level 3*/
+		5, 5, 2, 3, 7, 7, 6, 8, 7,/*level 4*/
+		5, 5, 2, 3, 8, 8, 7, 9, 7,/*level 5*/
 	};
 
 	/*statop sets in the order they should be tested*/
@@ -390,6 +389,11 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 		desc->channels < 3 || desc->channels > 4 || desc->colorspace > 1 )
 		return qoip_ret(1, stderr, "qoip_smarter: Bad arguments");
 
+	if(entropy==0) {//use FIFO instead of HASH for index1
+		for(i=0;i<5;++i)
+			++statop_index1[i];
+	}
+
 	qoip_init_working_memory(q, data, desc);
 	/* Stat pass */
 	q->px_pos = 0;
@@ -414,65 +418,67 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 					lumalog_loc = LUMALOG_INDEX_RGB(log_g, log_rb);
 					for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1)
 						res_delta1[it_delta1] = sim_delta1[it_delta1](q);
-					for(it_index1=0;it_index1<rgba_cnts[(level*9)+0];++it_index1) {//index1H
-						if(it_index1==5)/*Hack to quickly support indexF, fix TODO*/
-							break;
-						if(indexes1[it_index1][q->hash & index1_mask[it_index1]].v == q->px.v) {
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-									log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size++;
-								}
-							}
-						}
-						else {/*Not handled by index1 op*/
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								if(res_delta1[it_delta1]) {
+					if(entropy) {//HASH index1
+						for(it_index1=0;it_index1<rgba_cnts[(level*9)+0];++it_index1) {
+							if(indexes1[it_index1][q->hash & index1_mask[it_index1]].v == q->px.v) {
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
 									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 										log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size++;
 									}
 								}
-								else {/*Not handled by delta1 op*/
-									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-										if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v)
-											log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=2;
-										else {/*Not handled by index2 op*/
-											if(log_rb==8)/*rb too big for any luma op*/
-												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=4;
-											else
-												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+							}
+							else {/*Not handled by index1 op*/
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
+									if(res_delta1[it_delta1]) {
+										for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+											log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size++;
+										}
+									}
+									else {/*Not handled by delta1 op*/
+										for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+											if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v)
+												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=2;
+											else {/*Not handled by index2 op*/
+												if(log_rb==8)/*rb too big for any luma op*/
+													log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=4;
+												else
+													log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+											}
 										}
 									}
 								}
 							}
+							indexes1[it_index1][q->hash & index1_mask[it_index1]] = q->px;
 						}
-						indexes1[it_index1][q->hash & index1_mask[it_index1]] = q->px;
 					}
-					for(it_index1=5;it_index1<rgba_cnts[(level*9)+0];++it_index1) {//index1F
-						if(indexes1[it_index1][hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] & index1_mask[it_index1]].v == q->px.v) {
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-									log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size++;
-								}
-							}
-						}
-						else {/*Not handled by index1 op*/
-							hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] = wpos[it_index1];
-							indexes1[it_index1][wpos[it_index1]++ & index1_mask[it_index1]] = q->px;
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								if(res_delta1[it_delta1]) {
+					else {//FIFO index1
+						for(it_index1=0;it_index1<rgba_cnts[(level*9)+0];++it_index1) {//index1F
+							if(indexes1[it_index1][hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] & index1_mask[it_index1]].v == q->px.v) {
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
 									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 										log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size++;
 									}
 								}
-								else {/*Not handled by delta1 op*/
-									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-										if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v)
-											log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=2;
-										else {/*Not handled by index2 op*/
-											if(log_rb==8)/*rb too big for any luma op*/
-												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=4;
-											else
-												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+							}
+							else {/*Not handled by index1 op*/
+								hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] = wpos[it_index1];
+								indexes1[it_index1][wpos[it_index1]++ & index1_mask[it_index1]] = q->px;
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
+									if(res_delta1[it_delta1]) {
+										for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+											log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size++;
+										}
+									}
+									else {/*Not handled by delta1 op*/
+										for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+											if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v)
+												log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=2;
+											else {/*Not handled by index2 op*/
+												if(log_rb==8)/*rb too big for any luma op*/
+													log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].base_size+=4;
+												else
+													log_configs[LOGSTAT_INDEX_RGB(it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+											}
 										}
 									}
 								}
@@ -514,103 +520,105 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 					for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1)
 						res_delta1[it_delta1] = sim_delta1[it_delta1](q);
 					res_delta2[1] = sim_delta2[1](q);
-					for(it_index1=0;it_index1<rgba_cnts[(level*9)+0];++it_index1) {//index1H
-						if(it_index1==5)/*hack, fix TODO*/
-							break;
-						if(indexes1[it_index1][q->hash & index1_mask[it_index1]].v == q->px.v) {
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
-									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-										log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
-									}
-								}
-							}
-						}
-						else {/*Not handled by index1 op*/
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								if(res_delta1[it_delta1]) {
+					if(entropy) {//HASH index1
+						for(it_index1=0;it_index1<rgba_cnts[(level*9)+0];++it_index1) {//index1H
+							if(indexes1[it_index1][q->hash & index1_mask[it_index1]].v == q->px.v) {
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
 									for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
 										for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 											log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
 										}
 									}
 								}
-								else {/*Not handled by delta1 op*/
-									for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
-										if(res_delta2[it_delta2]) {
+							}
+							else {/*Not handled by index1 op*/
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
+									if(res_delta1[it_delta1]) {
+										for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
 											for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 												log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
 											}
 										}
-										else {/*Not handled by delta2 op (deltaa)*/
-											for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-												if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v) {
-													log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
+									}
+									else {/*Not handled by delta1 op*/
+										for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
+											if(res_delta2[it_delta2]) {
+												for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+													log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
 												}
-												else {/*Not handled by index2 op*/
-													if(q->vr==0&&q->vg==0&&q->vb==0) {/*OP_A*/
-														use_a=1;
+											}
+											else {/*Not handled by delta2 op (deltaa)*/
+												for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+													if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v) {
 														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
 													}
-													else if(log_a==8)
-														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=5;
-													else if(log_rb==8)
-														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+= (log_a?5:4);
-													else
-														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+													else {/*Not handled by index2 op*/
+														if(q->vr==0&&q->vg==0&&q->vb==0) {/*OP_A*/
+															use_a=1;
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
+														}
+														else if(log_a==8)
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=5;
+														else if(log_rb==8)
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+= (log_a?5:4);
+														else
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+													}
 												}
 											}
 										}
 									}
 								}
 							}
+							indexes1[it_index1][q->hash & index1_mask[it_index1]] = q->px;
 						}
-						indexes1[it_index1][q->hash & index1_mask[it_index1]] = q->px;
 					}
-					for(it_index1=5;it_index1<rgba_cnts[(level*9)+0];++it_index1) {//index1F
-						if(indexes1[it_index1][hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] & index1_mask[it_index1]].v == q->px.v) {
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
-									for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-										log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
-									}
-								}
-							}
-						}
-						else {/*Not handled by index1 op*/
-							hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] = wpos[it_index1];
-							indexes1[it_index1][wpos[it_index1]++ & index1_mask[it_index1]] = q->px;
-							for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
-								if(res_delta1[it_delta1]) {
+					else {//FIFO index1
+						for(it_index1=0;it_index1<rgba_cnts[(level*9)+0];++it_index1) {//index1F
+							if(indexes1[it_index1][hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] & index1_mask[it_index1]].v == q->px.v) {
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
 									for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
 										for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 											log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
 										}
 									}
 								}
-								else {/*Not handled by delta1 op*/
-									for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
-										if(res_delta2[it_delta2]) {
+							}
+							else {/*Not handled by index1 op*/
+								hashpos[it_index1][q->hash & (QOIP_FIFO_HASH_SIZE - 1)] = wpos[it_index1];
+								indexes1[it_index1][wpos[it_index1]++ & index1_mask[it_index1]] = q->px;
+								for(it_delta1=0;it_delta1<rgba_cnts[(level*9)+1];++it_delta1) {
+									if(res_delta1[it_delta1]) {
+										for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
 											for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
 												log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
 											}
 										}
-										else {/*Not handled by delta2 op (deltaa)*/
-											for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
-												if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v) {
-													log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
+									}
+									else {/*Not handled by delta1 op*/
+										for(it_delta2=0;it_delta2<rgba_cnts[(level*9)+2];++it_delta2) {
+											if(res_delta2[it_delta2]) {
+												for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+													log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size++;
 												}
-												else {/*Not handled by index2 op*/
-													if(q->vr==0&&q->vg==0&&q->vb==0) {/*OP_A*/
-														use_a=1;
+											}
+											else {/*Not handled by delta2 op (deltaa)*/
+												for(it_index2=0;it_index2<rgba_cnts[(level*9)+3];++it_index2) {
+													if(indexes2[it_index2][q->hash & index2_mask[it_index2]].v == q->px.v) {
 														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
 													}
-													else if(log_a==8)
-														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=5;
-													else if(log_rb==8)
-														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+= (log_a?5:4);
-													else
-														log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+													else {/*Not handled by index2 op*/
+														if(q->vr==0&&q->vg==0&&q->vb==0) {/*OP_A*/
+															use_a=1;
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=2;
+														}
+														else if(log_a==8)
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+=5;
+														else if(log_rb==8)
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].base_size+= (log_a?5:4);
+														else
+															log_configs[LOGSTAT_INDEX_RGBA(it_delta2, it_index1, it_delta1, it_index2)].lumalog[lumalog_loc]++;
+													}
 												}
 											}
 										}
@@ -786,7 +794,10 @@ int qoipcrunch_encode_smarter(const void *data, const qoip_desc *desc, void *out
 	{
 		int ret;
 		ret = qoip_encode(data, desc, out, out_len, opstr, entropy, scratch);
-		assert(*out_len == best_cnt);
+		if(entropy) {//Check size of raw bitstream TODO
+		}
+		else
+			assert(*out_len == best_cnt);
 		return ret;
 	}
 }

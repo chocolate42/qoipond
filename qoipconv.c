@@ -99,44 +99,39 @@ size_t qoipcrunch_write(const char *filename, const void *data, const qoip_desc 
 void *qoip_read(const char *filename, qoip_desc *desc, int channels) {
 	FILE *f = fopen(filename, "rb");
 	size_t max_size, size;
-	void *pixels = NULL, *data, *scratch = NULL;
+	void *pixels = NULL, *data = NULL, *scratch = NULL;
 
 	if (!f)
-		goto defer0;
+		goto cleanup;
 
 	fseek(f, 0, SEEK_END);
 	size = ftell(f);
 	if (size == 0)
-		goto defer1;
+		goto cleanup;
 	rewind(f);
 	if ( !(data = QOIP_MALLOC(size)) )
-		goto defer1;
+		goto cleanup;
 
 	if ( fread(data, 1, size, f)!=size )
-		goto defer2;
+		goto cleanup;
 
 	qoip_read_header(data, NULL, desc);
 	max_size = qoip_maxsize_raw(desc, channels);
+	if ( desc->entropy && !(scratch = QOIP_MALLOC(desc->raw_cnt)) )
+			goto cleanup;
 	if ( !(pixels = QOIP_MALLOC(max_size)) )
-		goto defer2;
+		goto cleanup;
 
-	if (desc->entropy) {
-		if( !(scratch = QOIP_MALLOC(desc->raw_cnt)) )
-			goto defer3;
+	if ( qoip_decode(data, size, desc, channels, pixels, scratch) ) {
+		free(pixels);
+		pixels = NULL;
 	}
-	if ( qoip_decode(data, size, desc, channels, pixels, scratch) )
-		goto defer3;
 
-	goto defer2;
-
-	defer3:
-	QOIP_FREE(pixels);
-	pixels = NULL;
-	defer2:
-	QOIP_FREE(data);
-	defer1:
-	fclose(f);
-	defer0:
+	cleanup:
+	if(data)
+		QOIP_FREE(data);
+	if(f)
+		fclose(f);
 	if(scratch)
 		free(scratch);
 	return pixels;
