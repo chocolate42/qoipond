@@ -534,7 +534,7 @@ void benchmark_directory(opt_t *opt, char *effort, const char *path, benchmark_r
 			continue;
 		}
 
-		if (!has_shown_heaad) {
+		if (opt->verbosity>=1 && !has_shown_heaad) {
 			has_shown_heaad = 1;
 			printf("## Benchmarking %s/*.png -- %d runs\n\n", path, opt->iterations);
 		}
@@ -544,7 +544,7 @@ void benchmark_directory(opt_t *opt, char *effort, const char *path, benchmark_r
 
 		benchmark_result_t res = benchmark_image(opt, effort, file_path);
 
-		if (!opt->onlytotals) {
+		if (opt->verbosity==2) {
 			printf("## %s size: %dx%d\n", file_path, res.w, res.h);
 			benchmark_print_result(opt, effort, res);
 		}
@@ -579,7 +579,7 @@ void benchmark_directory(opt_t *opt, char *effort, const char *path, benchmark_r
 	}
 	closedir(dir);
 
-	if (dir_total.count > 0) {
+	if (opt->verbosity>=1 && dir_total.count > 0) {
 		printf("## Total for %s\n", path);
 		benchmark_print_result(opt, effort, dir_total);
 	}

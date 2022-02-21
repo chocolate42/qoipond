@@ -14,13 +14,13 @@ typedef struct opt{
 	int threads;
 	int entropy;
 	int iterations;
+	int verbosity;
 	int warmup;
 	int png;
 	int verify;
 	int encode;
 	int decode;
 	int recurse;
-	int onlytotals;
 	int _mode;
 } opt_t;
 
@@ -46,13 +46,13 @@ int opt_init(opt_t *opt){
 	opt->threads=1;
 	opt->entropy=0;
 	opt->iterations=1;
+	opt->verbosity=1;
 	opt->warmup=1;
 	opt->png=1;
 	opt->verify=1;
 	opt->encode=1;
 	opt->decode=1;
 	opt->recurse=1;
-	opt->onlytotals=1;
 	opt->custom=NULL;
 	opt->directory=NULL;
 	return 0;
@@ -117,6 +117,10 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			}
 			++loc;
 		}
+		else if(strcmp("-verbosity", argv[loc])==0){
+			opt->verbosity=atoi(argv[loc+1]);
+			++loc;
+		}
 		else if(strcmp("-warmup", argv[loc])==0)
 			opt->warmup=1;
 		else if(strcmp("-no-warmup", argv[loc])==0)
@@ -141,10 +145,6 @@ int opt_process(opt_t *opt, int argc, char *argv[]){
 			opt->recurse=1;
 		else if(strcmp("-no-recurse", argv[loc])==0)
 			opt->recurse=0;
-		else if(strcmp("-onlytotals", argv[loc])==0)
-			opt->onlytotals=1;
-		else if(strcmp("-no-onlytotals", argv[loc])==0)
-			opt->onlytotals=0;
 		else if(strcmp("-license", argv[loc])==0){
 			if(modeset){
 				fprintf(stderr, "Error, multiple modes defined\n");
@@ -217,6 +217,8 @@ int optmode_help(){
 	printf("    Entropy coder to use. 0=none, 1=LZ4, 2=ZSTD (default 0)\n\n");
 	printf(" -iterations input\n");
 	printf("    Number of iterations to try, default 1.\n\n");
+	printf(" -verbosity input\n");
+	printf("    Amount of statistics to print (0:Grand total, 1:And dir stats, 2:And file stats)\n\n");
 	printf(" -warmup\n");
 	printf(" -no-warmup\n");
 	printf("    Perform a warmup run (default true)\n");
@@ -235,9 +237,6 @@ int optmode_help(){
 	printf(" -recurse\n");
 	printf(" -no-recurse\n");
 	printf("    Descend into directories (default true)\n");
-	printf(" -onlytotals\n");
-	printf(" -no-onlytotals\n");
-	printf("    Only print directory totals (default true)\n");
 
 	return 0;
 }

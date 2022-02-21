@@ -83,9 +83,9 @@
 		"int": true
 	},
 	{
-		"tag": "onlytotals",
-		"type": "flag",
-		"description": "Only print directory totals (default true)",
-		"int": true
+		"tag": "verbosity",
+		"type": "int",
+		"description": "Amount of statistics to print (0:Grand total, 1:And dir stats, 2:And file stats)",
+		"int": 1
 	},
 ]
