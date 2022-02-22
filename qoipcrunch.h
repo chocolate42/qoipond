@@ -82,16 +82,28 @@ threads * qoip_maxsize(desc)
 */
 
 int qoipcrunch_encode(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, void *tmp, int threads, int entropy) {
-	int level = qoip_effortlevel(effort);
+	int ret, level = qoip_effortlevel(effort);
 	if(level==-2)     /*Custom string*/
 		return qoipcrunch_encode_custom(data, desc, out, out_len, effort, tmp, threads, entropy);
 	else if(level==-1) /*Escape hatch to use fast1 combination*/
 		return qoip_encode(data, desc, out, out_len, "0343444682", entropy, tmp);
+	else if(entropy==QOIP_ENTROPY_ZSTD) {
+		/*ZSTD performs worse with index ops with large input, fallback to effort -1 if
+		necessary. Test effort -1 with no entropy, if result is large ZSTD encode and done*/
+		if( (ret = qoip_encode(data, desc, out, out_len, "0343444682", QOIP_ENTROPY_NONE, tmp)) )
+			return ret;
+		if(*out_len > 262144)/*threshold tuned with images/images-lance*/
+			qoip_entropy(out, out_len, tmp, QOIP_ENTROPY_ZSTD);
+		else if(level==0)
+			return qoip_encode(data, desc, out, out_len, "02244082a0a6c4c5e2", entropy, tmp);
+		else
+			return qoipcrunch_encode_smarter(data, desc, out, out_len, level-1, tmp, threads, entropy);
+	}
 	else if(level==0) /*Escape hatch to use best (known, on average) combination*/
 		return qoip_encode(data, desc, out, out_len, "02244082a0a6c4c5e2", entropy, tmp);
 	else              /*Search orders of magnitude more combinations with log tables, level 0..5*/
 		return qoipcrunch_encode_smarter(data, desc, out, out_len, level-1, tmp, threads, entropy);
-	return 1;
+	return 0;
 }
 
 int qoipcrunch_encode_custom(const void *data, const qoip_desc *desc, void *out, size_t *out_len, char *effort, void *tmp, int threads, int entropy) {
